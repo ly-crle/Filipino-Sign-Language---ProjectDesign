@@ -1,0 +1,884 @@
+{% extends "base.html" %}
+{% block title %}Activity Mode – FSL Learning{% endblock %}
+{% block content %}
+
+<section class="section py-4" style="background:rgba(250,250,255,0.7);backdrop-filter:blur(6px);">
+  <div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="fw-bold text-primary mb-0">🎯 Activity Mode</h4>
+      <div class="d-flex align-items-center gap-2">
+        <button id="resetBtn" class="btn btn-outline-secondary btn-sm">↺ Reset</button>
+        <span id="stateBadge" class="badge bg-secondary text-dark fs-6 px-3 py-2 shadow-sm">State: READY</span>
+      </div>
+    </div>
+
+    <div class="row g-3 align-items-stretch">
+      <div class="col-lg-6 position-relative">
+        <div class="card shadow-sm border-0 h-100 rounded-4 position-relative overflow-hidden">
+          <video id="mainCamera" autoplay playsinline muted
+                 style="width:100%;height:100%;background:#000;aspect-ratio:4/3;
+                        border-radius:1rem;z-index:1;transform:scaleX(-1);position:relative;"></video>
+
+          <canvas id="overlayCanvas"
+                  style="position:absolute;top:0;left:0;width:100%;height:100%;
+                         pointer-events:none;border-radius:1rem;z-index:2;"></canvas>
+
+          <div style="position: absolute; top: 15%; left: 5%; transform: translateY(-50%);
+                      z-index: 10; max-width: 250px; font-size: 0.85rem; color: #000;
+                      border: 2px solid rgba(0,0,0,0.8); background: rgba(255,255,255,0.8);"
+               class="p-3 rounded-4 shadow-sm">
+            <div class="mb-2">
+              <label class="d-flex align-items-center mb-1">
+                <input type="checkbox" id="toggleVisuals" checked class="me-2">
+                <span>👁 Landmarks & Boxes</span>
+              </label>
+            </div>
+            <div class="mb-2">
+              <label class="d-flex align-items-center mb-1">
+                <input type="checkbox" id="toggleTimer" checked class="me-2">
+                <span>🕒 Timer</span>
+              </label>
+            </div>
+            <div class="mb-2">
+              <label class="d-flex align-items-center mb-1">
+                <input type="checkbox" id="toggleResults" checked class="me-2">
+                <span>📝 Results</span>
+              </label>
+            </div>
+            <div class="mb-0">
+              <label class="d-flex align-items-center mb-1">
+                <input type="checkbox" id="toggleSpeed" class="me-2">
+                <span>⚡ Fast Mode (3 s)</span>
+              </label>
+            </div>
+          </div>
+
+          <div id="difficultyOverlay"
+               style="position: absolute; bottom: 800px; left: 50%; transform: translateX(-50%);
+                      z-index: 9; width: 100%; text-align: center;">
+            <div style="display: inline-block;">
+              <div style="display: flex; align-items: center; gap: 10px;
+                          background: rgba(255,255,255,0.9); border-radius: 25px;
+                          padding: 8px 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+                <label style="font-weight: 600; margin: 0; color: #333; font-size: 14px;">Difficulty:</label>
+                <select id="difficultySelect"
+                        style="border: 1px solid #ddd; border-radius: 6px; padding: 4px 8px;
+                               font-size: 13px; background: white;">
+                  <option value="easy" selected>🟢 Easy</option>
+                  <option value="compound">🔴 Compound</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div id="startOverlay" style="position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%); z-index: 9; width: 100%; text-align: center;">
+            <button id="startBtn" style="background: #28a745; color: white; border: none; border-radius: 8px; padding: 12px 24px; font-size: 16px; font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,0.3); cursor: pointer;">▶ Start</button>
+          </div>
+          
+          <div id="ghostBadge" class="position-absolute top-0 end-0 m-3 px-3 py-1 rounded-pill fw-bold" style="display:none;z-index:9;background:rgba(59,130,246,.95);color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.3);">👻 Ghost ON</div>
+
+          <div id="ghostControls" class="position-absolute top-0 start-0 m-3 d-flex gap-2" style="display:none;z-index:10;">
+            <button id="btnSizeDown" class="btn btn-sm btn-light px-2">Size −</button>
+            <button id="btnSizeUp" class="btn btn-sm btn-light px-2">Size +</button>
+            <button id="btnNudgeUp" class="btn btn-sm btn-light px-2">Align ↑</button>
+            <button id="btnNudgeDown" class="btn btn-sm btn-light px-2">Align ↓</button>
+          </div>
+
+          <div id="prepOverlay" class="position-absolute top-50 start-50 translate-middle fw-bold text-warning" style="font-size:3.2rem;display:none;z-index:8;text-shadow:3px 3px 8px #000;">Get Ready…</div>
+          <div id="recBadge" class="position-absolute top-0 start-0 m-3 px-3 py-1 rounded-pill fw-bold" style="display:none;z-index:9;background:#b10000;color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.3);">● REC</div>
+          <div class="position-absolute bottom-0 start-0 w-100" style="height:6px;background:rgba(255,255,255,.3);">
+            <div id="timerBar" style="height:100%;width:0%;background:#22c55e;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-6 d-flex flex-column">
+        <div class="card shadow-sm border-0 p-4 mb-4 rounded-4 flex-grow-1">
+
+          <div id="timerOverlay"
+              class="text-center fw-bold text-white py-2 rounded-3 mb-3 shadow-sm"
+              style="display:none;width:100%;background:#0d6efd;font-size:1.3rem;">
+            5
+            </div>
+
+          <div class="d-flex justify-content-between align-items-center mb-4">
+            <div class="text-start">
+              <h6 class="text-muted mb-1">Selected Gesture</h6>
+              <p id="targetLabel" class="fs-2 text-primary fw-bold mb-0">None</p>
+            </div>
+            <div id="resultText" class="fs-3 fw-bold text-secondary">—</div>
+          </div>
+
+          <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span id="capturePhase" class="text-muted">Idle</span>
+              <span class="text-muted"><span id="frameCount">0</span>/48 frames</span>
+            </div>
+            <div class="progress" style="height:12px;">
+              <div id="progressBar" class="progress-bar" role="progressbar" style="width:0%"></div>
+            </div>
+          </div>
+
+          <div id="assistRow" class="mt-3" style="display:none;">
+            <button id="btnShowHow" class="btn btn-outline-secondary btn-sm me-2">👻 Show me how</button>
+            <button id="btnTryAgain" class="btn btn-primary btn-sm">↻ Try again</button>
+            <div class="mt-2">
+              <span id="assistHint" class="text-muted small"></span>
+            </div>
+          </div>
+
+          <div class="mt-auto">
+            <div class="d-flex justify-content-around">
+              <div class="text-center">
+                <span class="text-success fw-bold fs-4" id="correctCount">0</span>
+                <p class="mb-0 text-muted">Correct</p>
+              </div>
+              <div class="text-center">
+                <span class="text-danger fw-bold fs-4" id="incorrectCount">0</span>
+                <p class="mb-0 text-muted">Incorrect</p>
+              </div>
+            </div>
+            <p class="text-muted mt-3 mb-0 small text-center">Flow: Start → Get Ready (1s) → Perform (~5s) → Predict / Stop.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
+
+<script>
+window.addEventListener("load", () => {
+  const NUMBER_SIGNS = ["One","Two","Three","Four","Five","Six","Seven","Eight","Nine","Ten"];
+  const COLOR_SIGNS  = ["Black","Blue","Brown","Dark","Gray","Green","Light","Orange","Pink","Red","Violet","White","Yellow"];
+  const FAMILY_SIGNS = ["Auntie","Uncle","Son","Daughter","Father","Mother","Grandmother","Grandfather","Cousin","Parents"];
+
+  const EASY_ALL_SIGNS = [...NUMBER_SIGNS, ...COLOR_SIGNS, ...FAMILY_SIGNS];
+
+  function pickEasySign() {
+    return EASY_ALL_SIGNS[Math.floor(Math.random() * EASY_ALL_SIGNS.length)];
+  }
+
+  function pickCompoundSign(){
+    const first = NUMBER_SIGNS[Math.floor(Math.random() * NUMBER_SIGNS.length)];
+    const second = COLOR_SIGNS[Math.floor(Math.random()*COLOR_SIGNS.length)];
+    return `${first} + ${second}`;
+  }
+
+  const videoEl = document.getElementById("mainCamera");
+  const canvasEl = document.getElementById("overlayCanvas");
+  const ctx = canvasEl.getContext("2d");
+
+  const startBtn = document.getElementById("startBtn");
+  const resetBtn = document.getElementById("resetBtn");
+  const stateBadge = document.getElementById("stateBadge");
+  const targetLabel = document.getElementById("targetLabel");
+  const resultText = document.getElementById("resultText");
+  const correctCountEl = document.getElementById("correctCount");
+  const incorrectCountEl = document.getElementById("incorrectCount");
+  const capturePhase = document.getElementById("capturePhase");
+  const frameCountEl = document.getElementById("frameCount");
+  const progressBar = document.getElementById("progressBar");
+  const prepOverlay = document.getElementById("prepOverlay");
+  const recBadge = document.getElementById("recBadge");
+  const timerBar = document.getElementById("timerBar");
+  const difficultySelect = document.getElementById("difficultySelect");
+
+  const toggleVisuals = document.getElementById('toggleVisuals');
+  const toggleTimer   = document.getElementById('toggleTimer');
+  const toggleResults = document.getElementById('toggleResults');
+  const toggleSpeed   = document.getElementById('toggleSpeed');
+
+  let showVisuals = true;
+  let showTimer   = true;
+  let showResults = true;
+
+  toggleVisuals.onchange = () => { showVisuals = toggleVisuals.checked; };
+  toggleTimer.onchange   = () => {
+    showTimer = toggleTimer.checked;
+    timerBar.style.display = showTimer ? 'block' : 'none';
+  };
+  toggleResults.onchange = () => {
+    showResults = toggleResults.checked;
+    resultText.style.display = showResults ? 'block' : 'none';
+  };
+
+  const STATE_READY=0, STATE_PREP=1, STATE_CAPTURE=2;
+  let state=STATE_READY;
+  function setState(s){ state=s; stateBadge.textContent="State: "+["READY","PREP","CAPTURE"][s]; }
+
+  let targetGesture=null, correctCount=0, incorrectCount=0;
+  const SEQ_LEN = 48, CAPTURE_MAX = 120;
+  const BASE_CAPTURE_MS = 5000;
+  let CAPTURE_MS = BASE_CAPTURE_MS; // 5s default; 10s for compound
+  let buf=[], running=false, frameSkip=1, frameCounter=0, autoJudge=false, captureStartMs=0;
+
+  function updateGestureDisplay(gesture) {
+    targetLabel.textContent = gesture ? gesture : 'None';
+  }
+  function flattenHand(lms){ if(!lms) return new Float32Array(63); const a=[]; for(let i=0;i<21;i++){ const p=lms[i]; a.push(p.x,p.y,p.z);} return new Float32Array(a); }
+  function lm(list,idx){ if(!list||idx>=list.length) return {x:NaN,y:NaN,z:NaN}; return list[idx]; }
+  function dist2D(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return Math.hypot(dx,dy)||1e-6; }
+
+  function normalizeGlobal(hand63,anchors){
+    if(!hand63||hand63.length!==63||!anchors.L_SH||!anchors.R_SH) return new Float32Array(63);
+    const out=new Float32Array(63);
+    const Cx=(anchors.L_SH.x+anchors.R_SH.x)/2;
+    const Cy=(anchors.L_SH.y+anchors.R_SH.y)/2;
+    const Cz=(anchors.L_SH.z+anchors.R_SH.z)/2;
+    const scale=Math.max(1e-6,dist2D(anchors.L_SH,anchors.R_SH));
+    for(let i=0;i<63;i+=3){
+      out[i]=(hand63[i]-Cx)/scale;
+      out[i+1]=(hand63[i+1]-Cy)/scale;
+      out[i+2]=(hand63[i+2]-Cz)/scale;
+    }
+    for(let i=0;i<63;i++) out[i]=Math.max(-5,Math.min(5,out[i]));
+    return out;
+  }
+
+  function derivedAltitudeFeatures(L,R,anchors){
+    const out=[];
+    const brow_y=0.5*(anchors.brow_r.y+anchors.brow_l.y);
+    const SEL=[0,4,8,12,16,20];
+    for(const H of [L,R]){
+      for(const j of SEL){
+        const by=j*3+1, bz=j*3+2;
+        const py=H[by], pz=H[bz];
+        out.push(py-anchors.chin.y, py-anchors.lip_u.y, py-brow_y, py-anchors.forehead.y, pz-anchors.nose.z);
+      }
+    }
+    return new Float32Array(out);
+  }
+
+  function normLabel(s){
+    if(!s) return "";
+    const x = String(s).toLowerCase().replace(/[^a-z0-9]+/g,'');
+    const map = {
+      "1":"one","2":"two","3":"three","4":"four","5":"five","6":"six","7":"seven","8":"eight","9":"nine","10":"ten",
+      "grandmother":"grandmother","grandma":"grandmother","lola":"grandmother",
+      "grandfather":"grandfather","grandpa":"grandfather","lolo":"grandfather",
+      "mom":"mother","mother":"mother","nanay":"mother",
+      "dad":"father","father":"father","tatay":"father",
+      "aunt":"auntie","auntie":"auntie","tita":"auntie",
+      "uncle":"uncle","tito":"uncle",
+      "boy":"son","girl":"daughter",
+      "purple":"violet","violet":"violet","grey":"gray","gray":"gray",
+      "light":"light","dark":"dark",
+      "white":"white","black":"black","blue":"blue","brown":"brown","green":"green","orange":"orange","pink":"pink","red":"red","yellow":"yellow"
+    };
+    return map[x] || x;
+  }
+  function inferCategory(label){
+    const l = normLabel(label);
+    if (["one","two","three","four","five","six","seven","eight","nine","ten"].includes(l)) return "numbers";
+    if (["auntie","uncle","son","daughter","father","mother","grandmother","grandfather","cousin","parents"].includes(l)) return "family";
+    return "colors";
+  }
+
+  function packFeature(res){
+    const pose=res.poseLandmarks||[], face=res.faceLandmarks||[];
+    const anchors={};
+    anchors.L_SH=lm(pose,11); anchors.R_SH=lm(pose,12);
+    anchors.nose=lm(face,1); anchors.forehead=lm(face,10);
+    anchors.lip_u=lm(face,13); anchors.brow_r=lm(face,65); anchors.brow_l=lm(face,295);
+    anchors.chin=lm(face,152);
+    const Lh=res.rightHandLandmarks?flattenHand(res.rightHandLandmarks):null;
+    const Rh=res.leftHandLandmarks?flattenHand(res.leftHandLandmarks):null;
+    const lf=Lh?1:0, rf=Rh?1:0;
+    if(!Lh && !Rh) return null;
+    const L=normalizeGlobal(Lh,anchors), R=normalizeGlobal(Rh,anchors);
+    const alt=derivedAltitudeFeatures(L,R,anchors);
+    return new Float32Array([...L,...R,...alt,lf,rf]);
+  }
+
+  function temporalFix(frames,seqLen){
+    if(frames.length<=seqLen){
+      const pad=Array.from({length:seqLen-frames.length},()=>frames[frames.length-1]);
+      return frames.concat(pad);
+    }
+    const scores=new Array(frames.length).fill(0);
+    for(let i=1;i<frames.length;i++){
+      const f0=frames[i-1], f1=frames[i]; if(!f0||!f1) continue;
+      let motion=0; for(let j=0;j<f0.length-2;j++) motion+=Math.abs(f1[j]-f0[j]);
+      motion/=(f0.length-2);
+      const presence=f1[f1.length-2]+f1[f1.length-1];
+      scores[i]=0.7*motion+0.3*presence;
+    }
+    const W=Math.min(40,frames.length);
+    let bestStart=0, bestSum=-1e9, runSum=0;
+    for(let i=0;i<W;i++) runSum+=scores[i]; bestSum=runSum;
+    for(let i=1;i<=scores.length-W;i++){
+      runSum+=scores[i+W-1]-scores[i-1];
+      if(runSum>bestSum){bestSum=runSum; bestStart=i;}
+    }
+    const selected=frames.slice(bestStart,bestStart+W);
+    const step=selected.length/seqLen;
+    const aligned=[];
+    for(let i=0;i<seqLen;i++){
+      const idx=Math.min(Math.floor(i*step),selected.length-1);
+      aligned.push(selected[idx]);
+    }
+    return aligned;
+  }
+
+  function updateBuffer(f){
+    if(buf.length<CAPTURE_MAX) buf.push(f);
+    else { buf.shift(); buf.push(f); }
+    frameCountEl.textContent=Math.min(buf.length,SEQ_LEN);
+    progressBar.style.width=Math.min(100,Math.round((buf.length/CAPTURE_MAX)*100))+"%";
+    if(state===STATE_CAPTURE && captureStartMs){
+      const t=Math.max(0,Math.min(1,(Date.now()-captureStartMs)/CAPTURE_MS));
+      if (showTimer) timerBar.style.width=(t*100).toFixed(1)+'%';
+    } else {
+      timerBar.style.width='0%';
+    }
+    if(buf.length>=CAPTURE_MAX && !autoJudge){
+      autoJudge=true; setTimeout(()=>stopAndPredict(),200);
+    }
+  }
+
+  // ======= PREDICT =======
+  const PREDICT_URL = location.origin + '/predict';
+  async function callPredict(sequence) {
+    const payload = { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ sequence }) };
+    const res = await fetch(PREDICT_URL, payload);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  function extractPredictedLabel(j){
+    let predicted = j?.prediction || j?.label || j?.pred?.label || j?.pred?.class;
+    if (!predicted && Array.isArray(j?.topk) && j.topk.length) {
+      predicted = j.topk[0].label || j.topk[0].class || j.topk[0].name;
+    }
+    if (typeof predicted === "string" && predicted.includes("_")) {
+      predicted = predicted.split("_").pop();
+    }
+    return normLabel(predicted);
+  }
+
+  async function predictOnce(silent=false){
+    if (buf.length < 20) {
+      if (!silent) alert('Not enough data.');
+      return { predicted: null, raw: null };
+    }
+    const fixed = temporalFix(buf, SEQ_LEN);
+    const seq = fixed.flatMap(f => Array.from(f));
+
+    try {
+      const j = await callPredict(seq);
+      const predicted = extractPredictedLabel(j);
+
+      if (difficultySelect.value !== "compound" && !silent) {
+        const target = normLabel(targetGesture || '');
+        if (predicted && target && predicted === target) {
+          correctCount++;
+          resultText.textContent = '✅ Correct!';
+          resultText.className = 'fs-4 fw-bold text-success';
+          correctCountEl.textContent = String(correctCount);
+          document.getElementById("assistRow").style.display = 'none';
+        } else {
+          incorrectCount++;
+          resultText.textContent = '❌ Incorrect';
+          resultText.className = 'fs-4 fw-bold text-danger';
+          incorrectCountEl.textContent = String(incorrectCount);
+          const assistRow = document.getElementById("assistRow");
+          const assistHint = document.getElementById("assistHint");
+          assistRow.style.display = 'block';
+          assistHint.textContent = 'Watch the overlay, then try again.';
+        }
+      }
+      return { predicted, raw: j };
+    } catch (e) {
+      console.error(e);
+      if (!silent) {
+        resultText.textContent = '⚠️ Prediction error';
+        resultText.className = 'fs-4 fw-bold text-warning';
+        const assistRow = document.getElementById("assistRow");
+        const assistHint = document.getElementById("assistHint");
+        assistRow.style.display = 'block';
+        assistHint.textContent = 'Check that the backend is running and reachable.';
+      }
+      return { predicted: null, raw: null };
+    }
+  }
+
+  // ======= COMPOUND FLOW / STOP =======
+  async function stopAndPredict(isHalfway = false) {
+    if (state !== STATE_CAPTURE && state !== STATE_PREP) return;
+
+    if (isHalfway) {
+      if (autoJudge === "lock" || autoJudge === "half_done") return;
+      autoJudge = "lock";
+
+      capturePhase.textContent = "✅ First sign complete — processing...";
+      const firstResult = await predictOnce(true);
+      window.firstCompoundResult = firstResult;
+
+      const [firstExpected, secondExpected] = (targetGesture || "")
+        .split("+")
+        .map(s => normLabel(s.trim()));
+
+      const firstPred = normLabel(firstResult?.predicted);
+      if (firstPred === firstExpected) {
+        resultText.textContent = `✅ First sign correct (${firstExpected})`;
+        resultText.className = "fs-5 fw-bold text-success";
+      } else {
+        resultText.textContent = `❌ First sign incorrect — expected ${firstExpected}`;
+        resultText.className = "fs-5 fw-bold text-danger";
+      }
+
+      buf = [];
+      frameCounter = 0;
+      frameCountEl.textContent = "0";
+      progressBar.style.width = "0%";
+      timerBar.style.width = "0%";
+
+      setTimeout(() => {
+        autoJudge = "half_done";
+        capturePhase.textContent = "Perform second sign (~5 s)…";
+        captureStartMs = Date.now();
+      }, 1200);
+
+      return;
+    }
+
+    if (difficultySelect.value === "compound") {
+      if (autoJudge === "done") return;
+      autoJudge = "done";
+
+      running = false;
+      recBadge.style.display = "none";
+      capturePhase.textContent = "Processing results...";
+      try { await camera.stop(); } catch(_) {}
+
+      const secondResult = await predictOnce(true);
+      const firstResult = window.firstCompoundResult || {};
+
+      const [firstExpected, secondExpected] = (targetGesture || "")
+        .split("+")
+        .map(s => normLabel(s.trim()));
+
+      const firstPred = normLabel(firstResult?.predicted);
+      const secondPred = normLabel(secondResult?.predicted);
+
+      let summary = "";
+      if (firstPred === firstExpected && secondPred === secondExpected) {
+        summary = `✅ Compound correct: ${firstExpected} + ${secondExpected}`;
+        resultText.className = "fs-4 fw-bold text-success";
+        correctCount++;
+      } else if (firstPred === firstExpected && secondPred !== secondExpected) {
+        summary = `❌ Second sign incorrect — expected ${secondExpected}`;
+        resultText.className = "fs-4 fw-bold text-danger";
+        incorrectCount++;
+      } else if (firstPred !== firstExpected && secondPred === secondExpected) {
+        summary = `❌ First sign incorrect — expected ${firstExpected}`;
+        resultText.className = "fs-4 fw-bold text-danger";
+        incorrectCount++;
+      } else {
+        summary = `❌ Both signs incorrect`;
+        resultText.className = "fs-4 fw-bold text-danger";
+        incorrectCount++;
+      }
+
+      resultText.textContent = summary;
+      correctCountEl.textContent = String(correctCount);
+      incorrectCountEl.textContent = String(incorrectCount);
+
+      stopNumericTimer();
+      setState(STATE_READY);
+      capturePhase.textContent = "Idle";
+      startBtn.style.display = "inline-block";
+      timerBar.style.width = "0%";
+      return;
+    }
+
+    // Easy
+    running = false;
+    recBadge.style.display = "none";
+    await predictOnce(false);
+    setState(STATE_READY);
+    capturePhase.textContent = "Idle";
+    startBtn.style.display = "inline-block";
+    timerBar.style.width = "0%";
+  }
+
+  // ======= GHOST OVERLAY =======
+  const HAND_CONN = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[0,9],[9,10],[10,11],[11,12],[0,13],[13,14],[14,15],[15,16],[0,17],[17,18],[18,19],[19,20]];
+  let ghostEnabled=false, ghostFrames=null, ghostIdx=0, ghostReady=false;
+  let previewMode=false;
+  let scaleMultiplier = 1.08;
+  let yOffset = -0.08;
+  let ghostPlaybackSpeed = 0.25;
+
+  const ghostBadge = document.getElementById("ghostBadge");
+  const ghostControls = document.getElementById("ghostControls");
+  const btnSizeDown = document.getElementById("btnSizeDown");
+  const btnSizeUp = document.getElementById("btnSizeUp");
+  const btnNudgeUp = document.getElementById("btnNudgeUp");
+  const btnNudgeDown = document.getElementById("btnNudgeDown");
+
+  function showGhostUI(show){
+    ghostBadge.style.display = show ? 'inline-block' : 'none';
+    ghostControls.style.display = show ? 'flex' : 'none';
+  }
+
+  btnSizeUp.onclick    = () => { scaleMultiplier = Math.min(1.6, scaleMultiplier + 0.04); };
+  btnSizeDown.onclick  = () => { scaleMultiplier = Math.max(0.7, scaleMultiplier - 0.04); };
+  btnNudgeUp.onclick   = () => { yOffset -= 0.01; };
+  btnNudgeDown.onclick = () => { yOffset += 0.01; };
+
+  window.addEventListener('keydown', (e) => {
+    if(!ghostEnabled) return;
+    if(e.key === '=' || e.key === '+') { scaleMultiplier = Math.min(1.6, scaleMultiplier + 0.04); }
+    if(e.key === '-') { scaleMultiplier = Math.max(0.7, scaleMultiplier - 0.04); }
+    if(e.key === 'ArrowUp') { yOffset -= 0.01; }
+    if(e.key === 'ArrowDown') { yOffset += 0.01; }
+  });
+
+  function anchorsValid(a){
+    if(!a || !a.L_SH || !a.R_SH) return false;
+    return Number.isFinite(a.L_SH.x) && Number.isFinite(a.R_SH.x) && Number.isFinite(a.L_SH.y) && Number.isFinite(a.R_SH.y) && dist2D(a.L_SH, a.R_SH) > 0.02;
+  }
+
+  async function startPreviewIfNeeded(){
+    if(state!==STATE_CAPTURE && !previewMode){
+      previewMode=true;
+      capturePhase.textContent='Preview (overlay)…';
+      setState(STATE_READY);
+      timerBar.style.width='0%';
+      await camera.start();
+    }
+  }
+  async function stopPreviewIfAny(){
+    if(previewMode){
+      previewMode=false;
+      capturePhase.textContent='Idle';
+      try{ await camera.stop(); }catch(_){}
+    }
+  }
+
+  async function findDemoUrl(cat, key){
+    const STATIC_BASE = (window.location.origin + '/static/video').replace(/\/+$/, '');
+    const names=[];
+    for(let i=1;i<=10;i++) names.push(key + '_' + String(i).padStart(2,'0') + '.mp4');
+    names.push(key + '.mp4');
+    for(const n of names){
+      const url = STATIC_BASE + '/' + cat + '/' + n;
+      try{
+        const r=await fetch(url,{method:'HEAD',cache:'no-store'});
+        if(r.ok) return url;
+      }catch(_){}
+    }
+    return null;
+  }
+
+  function drawGhostHand(norm63, anchors, ctx, color){
+    if (!norm63) return;
+    const baseScale=Math.max(1e-6, dist2D(anchors.L_SH, anchors.R_SH));
+    const scale = baseScale * scaleMultiplier;
+    const Cx=(anchors.L_SH.x+anchors.R_SH.x)/2;
+    const Cy=(anchors.L_SH.y+anchors.R_SH.y)/2 + yOffset;
+    const pts=[];
+    for (let i=0;i<63;i+=3){
+      const x = norm63[i  ]*scale + Cx;
+      const y = norm63[i+1]*scale + Cy;
+      pts.push({x:x, y:y});
+    }
+    ctx.save();
+    ctx.globalCompositeOperation='screen';
+    ctx.strokeStyle=color;
+    ctx.lineWidth=4.5;
+    ctx.fillStyle=color;
+    ctx.shadowBlur=18;
+    ctx.shadowColor=color;
+    const W=canvasEl.width, H=canvasEl.height;
+    for (let k=0;k<HAND_CONN.length;k++){
+      const a=HAND_CONN[k][0], b=HAND_CONN[k][1];
+      const p=pts[a], q=pts[b];
+      ctx.beginPath(); ctx.moveTo(p.x*W, p.y*H); ctx.lineTo(q.x*W, q.y*H); ctx.stroke();
+    }
+    for (let i=0;i<pts.length;i++){
+      const p=pts[i]; ctx.beginPath(); ctx.arc(p.x*W, p.y*H, 5.2, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  async function loadGhostFor(label){
+    const cat=inferCategory(label);
+    const key=normLabel(label);
+    const assistHint = document.getElementById("assistHint");
+    assistHint.textContent='Loading demo overlay…';
+    showGhostUI(false);
+    const url=await findDemoUrl(cat,key);
+    if(!url){ assistHint.textContent='No demo found for '+cat+'/'+key; ghostReady=false; return false; }
+    const v=document.createElement('video');
+    v.src=url; v.muted=true; v.playsInline=true; v.crossOrigin='anonymous';
+    await new Promise((resolve,reject)=>{ v.onloadedmetadata=resolve; v.onerror=()=>reject(new Error('Video error')); });
+    const ghostHolistic=new Holistic({locateFile:function(f){ return 'https://cdn.jsdelivr.net/npm/@mediapipe/holistic/'+f; }});
+    ghostHolistic.setOptions({selfieMode:false,modelComplexity:1,smoothLandmarks:true,refineFaceLandmarks:false,minDetectionConfidence:0.5,minTrackingConfidence:0.5});
+    ghostFrames=[];
+    ghostHolistic.onResults(res=>{
+      const pose=res.poseLandmarks||[], face=res.faceLandmarks||[];
+      const anchors={};
+      anchors.L_SH=lm(pose,11); anchors.R_SH=lm(pose,12);
+      anchors.nose=lm(face,1); anchors.forehead=lm(face,10);
+      anchors.lip_u=lm(face,13); anchors.brow_r=lm(face,65); anchors.brow_l=lm(face,295);
+      anchors.chin=lm(face,152);
+      const Lh=res.rightHandLandmarks?flattenHand(res.rightHandLandmarks):null;
+      const Rh=res.leftHandLandmarks?flattenHand(res.leftHandLandmarks):null;
+      if(!Lh && !Rh) return;
+      const L=Lh?normalizeGlobal(Lh,anchors):new Float32Array(63);
+      const R=Rh?normalizeGlobal(Rh,anchors):new Float32Array(63);
+      ghostFrames.push({L:L, R:R});
+    });
+    const total=Math.min(24, Math.max(12, Math.floor(v.duration*6)));
+    for(let i=0;i<total;i++){
+      v.currentTime = (v.duration * i)/total;
+      await new Promise(function(r){ v.onseeked=r; });
+      await ghostHolistic.send({image:v});
+    }
+    ghostReady = ghostFrames.length>0;
+    assistHint.textContent = ghostReady ? 'Overlay loaded. Use Size/Align controls if needed.' : 'No hands detected in demo video.';
+    return ghostReady;
+  }
+
+  let ghostTimer=null;
+  const GHOST_DURATION_MS=12000;
+
+  document.getElementById("btnShowHow").onclick = async () => {
+    if(!targetGesture) return;
+    ghostEnabled=true; ghostFrames=null; ghostReady=false; ghostIdx=0;
+    await startPreviewIfNeeded();
+    const ok = await loadGhostFor(targetGesture);
+    if (ok){
+      showGhostUI(true);
+      if (ghostTimer) clearTimeout(ghostTimer);
+      ghostTimer=setTimeout(() => {
+        ghostEnabled=false; showGhostUI(false); document.getElementById("assistHint").textContent='';
+      }, GHOST_DURATION_MS);
+    }else{
+      ghostEnabled=false; showGhostUI(false);
+    }
+  };
+
+  document.getElementById("btnTryAgain").onclick = async () => {
+    ghostEnabled=false; showGhostUI(false); document.getElementById("assistHint").textContent='';
+    await stopPreviewIfAny();
+    resultText.textContent='—';
+    startBtn.click();
+  };
+
+  // ======= MEDIAPIPE HOOK =======
+  const holistic=new Holistic({locateFile:function(f){ return 'https://cdn.jsdelivr.net/npm/@mediapipe/holistic/'+f; }});
+  holistic.setOptions({selfieMode:false,modelComplexity:2,smoothLandmarks:true,refineFaceLandmarks:false,minDetectionConfidence:0.55,minTrackingConfidence:0.55});
+
+  holistic.onResults(function(res){
+    ctx.save();
+    ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+
+    // Always draw the camera frame to keep orientation consistent.
+    // (Visuals toggle only hides the boxes/landmarks, not the base frame.)
+    ctx.drawImage(res.image, 0, 0, canvasEl.width, canvasEl.height);
+
+    const pose = res.poseLandmarks || [];
+    const face = res.faceLandmarks || [];
+    const anchors = {};
+    anchors.L_SH = lm(pose, 11);
+    anchors.R_SH = lm(pose, 12);
+    anchors.nose = lm(face, 1);
+    anchors.forehead = lm(face, 10);
+    anchors.lip_u = lm(face, 13);
+    anchors.brow_r = lm(face, 65);
+    anchors.brow_l = lm(face, 295);
+    anchors.chin = lm(face, 152);
+
+    if (showVisuals) {
+      const RH = res.rightHandLandmarks;
+      const LH = res.leftHandLandmarks;
+
+      const drawBox = (landmarks, color) => {
+        if (!landmarks || !landmarks.length) return;
+        let minX = 1, minY = 1, maxX = 0, maxY = 0;
+        landmarks.forEach(p => {
+          minX = Math.min(minX, p.x);
+          maxX = Math.max(maxX, p.x);
+          minY = Math.min(minY, p.y);
+          maxY = Math.max(maxY, p.y);
+        });
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.strokeRect(
+          minX * canvasEl.width,
+          minY * canvasEl.height,
+          (maxX - minX) * canvasEl.width,
+          (maxY - minY) * canvasEl.height
+        );
+        ctx.fillStyle = color;
+        landmarks.forEach(p => {
+          ctx.beginPath();
+          ctx.arc(p.x * canvasEl.width, p.y * canvasEl.height, 4, 0, 2 * Math.PI);
+          ctx.fill();
+        });
+      };
+
+      if (RH) drawBox(RH, 'rgba(0,255,0,0.8)');
+      if (LH) drawBox(LH, 'rgba(255,0,0,0.8)');
+    }
+
+    // Ghost overlay drawing (when enabled)
+    if (ghostEnabled && ghostReady && anchorsValid(anchors) && ghostFrames && ghostFrames.length){
+      const total=ghostFrames.length;
+      ghostIdx+=ghostPlaybackSpeed; if(ghostIdx>=total) ghostIdx=0;
+      const frameA=ghostFrames[Math.floor(ghostIdx)%total];
+      const frameB=ghostFrames[Math.floor(ghostIdx+1)%total];
+      const t=ghostIdx%1;
+      const L=new Float32Array(63); const R=new Float32Array(63);
+      for(let i=0;i<63;i++){L[i]=(1-t)*frameA.L[i]+t*frameB.L[i]; R[i]=(1-t)*frameA.R[i]+t*frameB.R[i];}
+      drawGhostHand(L, anchors, ctx, 'rgba(59,130,246,0.85)');
+      drawGhostHand(R, anchors, ctx, 'rgba(34,197,94,0.85)');
+      showGhostUI(true);
+    } else if (ghostEnabled && !anchorsValid(anchors)) {
+      const assistHint = document.getElementById("assistHint");
+      assistHint.textContent = 'Step back so both shoulders are visible.';
+      showGhostUI(false);
+    } else {
+      showGhostUI(false);
+    }
+
+    ctx.restore();
+
+    // Simple HUD (optional)
+    // (kept from your original; remove if you don't want it)
+    const shL=lm(pose,11), shR=lm(pose,12);
+    const sd=(isFinite(shL.x)&&isFinite(shR.x))?dist2D(shL,shR).toFixed(3):'nan';
+    // You can comment this out if not needed:
+    // console.debug('ShoulderDist:', sd);
+
+    if (running && state === STATE_CAPTURE) {
+      frameCounter++;
+      if (frameCounter % frameSkip === 0) {
+        const feat = packFeature(res);
+        if (feat) updateBuffer(feat);
+      }
+
+      const elapsed = Date.now() - captureStartMs;
+
+      if (difficultySelect.value === "compound") {
+        if (elapsed >= BASE_CAPTURE_MS && autoJudge === false) {
+          stopAndPredict(true);  // halfway
+        } else if (elapsed >= BASE_CAPTURE_MS * 2 && autoJudge === "half_done") {
+          stopAndPredict(false); // final
+        }
+      } else if (elapsed >= BASE_CAPTURE_MS && autoJudge === false) {
+        autoJudge = true;
+        setTimeout(() => stopAndPredict(), 80);
+      }
+    }
+  });
+
+  // ======= CAMERA =======
+  const camera=new Camera(videoEl,{ onFrame:async function(){ await holistic.send({image:videoEl}); }, width:640, height:480 });
+
+  // ======= START / RESET =======
+  const originalStart = () => {
+    const diff = difficultySelect.value;
+    const fastMode = toggleSpeed.checked;
+    CAPTURE_MS = fastMode ? 3000 : ((diff === "compound") ? BASE_CAPTURE_MS * 2 : BASE_CAPTURE_MS);
+
+    if (diff === "easy") {
+      targetGesture = pickEasySign();
+      updateGestureDisplay(`${targetGesture} (Easy)`);
+    } else if (diff === "compound") {
+      targetGesture = pickCompoundSign();
+      updateGestureDisplay(`${targetGesture} (Compound)`);
+    }
+
+    buf = [];
+    frameCounter = 0;
+    autoJudge = false;
+    setState(STATE_PREP);
+
+    prepOverlay.style.display = "block";
+    recBadge.style.display = "none";
+    startBtn.style.display = "none";
+    resultText.textContent = "—";
+    capturePhase.textContent = "Get Ready…";
+    running = true;
+    camera.start();
+    timerBar.style.width = "0%";
+    document.getElementById("assistRow").style.display = "none";
+
+    setTimeout(function () {
+      setState(STATE_CAPTURE);
+      prepOverlay.style.display = "none";
+      recBadge.style.display = "inline-block";
+      capturePhase.textContent = (diff === "compound") ? "Perform first sign (~5 s)…" : "Perform Now (~5 s)…";
+      captureStartMs = Date.now();
+      startNumericTimer(toggleSpeed.checked);
+    }, 1000);
+  };
+
+startBtn.onclick = async () => { await stopPreviewIfAny(); originalStart(); };
+
+const originalReset = () => {
+  correctCount=0; incorrectCount=0;
+  correctCountEl.textContent='0'; incorrectCountEl.textContent='0';
+  targetGesture=null; updateGestureDisplay(null); resultText.textContent='—';
+  document.getElementById("assistRow").style.display='none';
+  document.getElementById("assistHint").textContent='';
+  ghostEnabled=false; ghostFrames=null; ghostIdx=0; ghostReady=false; showGhostUI(false);
+  buf=[]; frameCounter=0; frameCountEl.textContent='0'; progressBar.style.width='0%'; timerBar.style.width='0%';
+  capturePhase.textContent='Idle'; setState(STATE_READY);
+  stopNumericTimer(); // 🔹 hide numeric timer when reset
+  startBtn.style.display='inline-block';
+  scaleMultiplier=1.08; yOffset=-0.02; ghostPlaybackSpeed=0.5;
+};
+resetBtn.onclick = async () => { await stopPreviewIfAny(); originalReset(); };
+
+let tickInterval = null;
+const timerOverlay = document.getElementById("timerOverlay");
+
+function startNumericTimer(fastMode) {
+  if (!showTimer) return;
+  clearInterval(tickInterval);
+
+  let countdown = fastMode ? 3 : 5;
+  timerOverlay.textContent = countdown;
+  timerOverlay.style.display = "block";
+  timerOverlay.style.background = "#0d6efd";
+
+  tickInterval = setInterval(() => {
+    countdown--;
+    if (countdown <= 0) {
+      timerOverlay.textContent = "0";
+      timerOverlay.style.background = "#dc3545";
+      clearInterval(tickInterval);
+      setTimeout(() => (timerOverlay.style.display = "none"), 600);
+      return;
+    }
+    timerOverlay.textContent = countdown;
+    if (countdown <= 1) timerOverlay.style.background = "#dc3545";
+    else if (countdown <= 2) timerOverlay.style.background = "#fd7e14";
+    else timerOverlay.style.background = "#0d6efd";
+  }, 1000);
+}
+
+function stopNumericTimer() {
+  clearInterval(tickInterval);
+  timerOverlay.style.display = "none";
+}
+
+function resize(){
+  canvasEl.width = videoEl.clientWidth;
+  canvasEl.height = videoEl.clientHeight;
+}
+new ResizeObserver(resize).observe(videoEl);
+resize();
+});
+</script>
+
+{% endblock %}

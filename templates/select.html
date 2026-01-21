@@ -1,0 +1,1254 @@
+{% extends "base.html" %}
+{% block title %}Select & Practice – FSL Learning{% endblock %}
+
+{% block content %}
+
+<style>
+  .select-page {
+    background: rgba(250, 250, 255, 0.7);
+    backdrop-filter: blur(10px);
+    min-height: calc(100vh - 200px);
+  }
+  
+  .camera-split-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  
+  @media (max-width: 1024px) {
+    .camera-split-container {
+      grid-template-columns: 1fr;
+    }
+  }
+  
+  .camera-view {
+    position: relative;
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    background: #000;
+    aspect-ratio: 4/3;
+    box-shadow: var(--shadow-xl);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+  }
+  
+  .camera-view video,
+  .camera-view canvas {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  
+  .camera-label {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    background: rgba(30, 58, 138, 0.9);
+    backdrop-filter: blur(10px);
+    color: white;
+    padding: 6px 14px;
+    border-radius: var(--radius-full);
+    font-size: 0.875rem;
+    font-weight: 600;
+    z-index: 10;
+    box-shadow: var(--shadow-md);
+  }
+  
+  .control-panel {
+    background: var(--gradient-card);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    border-radius: var(--radius-xl);
+    padding: 2rem;
+    box-shadow: var(--shadow-lg);
+  }
+  
+  .toggle-panel {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: var(--radius-lg);
+    padding: 1rem;
+    box-shadow: var(--shadow-md);
+  }
+  
+  .stat-card {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 252, 0.9) 100%);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    text-align: center;
+    box-shadow: var(--shadow-md);
+    transition: all var(--transition-base);
+  }
+  
+  .stat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+  }
+  
+  .stat-number {
+    font-size: 2.5rem;
+    font-weight: 900;
+    line-height: 1;
+    margin-bottom: 0.5rem;
+  }
+  
+  .progress-container {
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: var(--radius-full);
+    height: 12px;
+    overflow: hidden;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  
+  .progress-bar-custom {
+    height: 100%;
+    background: var(--gradient-primary);
+    border-radius: var(--radius-full);
+    transition: width 0.3s ease;
+    box-shadow: 0 2px 8px rgba(30, 58, 138, 0.3);
+  }
+</style>
+
+<section class="section select-page">
+  <div class="container">
+    <!-- Header -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2rem;flex-wrap:wrap;gap:1rem;">
+      <div>
+        <h1 style="font-size:2rem;font-weight:900;color:var(--primary);margin-bottom:0.5rem;">✋ Select & Practice</h1>
+        <p class="muted" style="margin:0;">Choose a gesture and practice with real-time AI feedback</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+        <button id="resetBtn" class="btn btn-outline" style="padding:0.75rem 1.5rem;">↺ Reset</button>
+        <span id="stateBadge" class="pill" style="padding:0.75rem 1.5rem;background:rgba(30, 58, 138, 0.1);color:var(--primary);border-color:rgba(30, 58, 138, 0.3);">State: READY</span>
+      </div>
+    </div>
+
+    <!-- Split Screen: Main Camera + Skeleton View -->
+    <div class="camera-split-container">
+      <!-- Main Webcam View -->
+      <div class="camera-view">
+        <span class="camera-label">📹 Main Camera</span>
+        <video id="mainCamera" autoplay playsinline muted style="transform:scaleX(-1);"></video>
+        <canvas id="overlayCanvas" style="position:absolute;top:0;left:0;pointer-events:none;z-index:2;"></canvas>
+
+        <!-- Overlays for main camera -->
+        <div id="prepOverlay"
+             style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:8;display:none;
+                    font-size:3rem;font-weight:900;color:#fbbf24;text-shadow:3px 3px 8px rgba(0,0,0,0.8);">
+          Get Ready…
+        </div>
+
+        <div id="recBadge"
+             style="position:absolute;top:12px;right:12px;z-index:9;display:none;
+                    background:#b10000;color:#fff;padding:6px 14px;border-radius:var(--radius-full);
+                    font-weight:700;font-size:0.875rem;box-shadow:0 2px 10px rgba(0,0,0,.5);">
+          ● REC
+        </div>
+
+        <div id="ghostBadge"
+             style="position:absolute;top:12px;right:12px;z-index:9;display:none;
+                    background:rgba(59,130,246,.95);color:#fff;padding:6px 14px;border-radius:var(--radius-full);
+                    font-weight:700;font-size:0.875rem;box-shadow:0 2px 10px rgba(0,0,0,.3);">
+          👻 Ghost ON
+        </div>
+
+        <div id="ghostControls"
+             style="position:absolute;top:50px;left:12px;z-index:10;display:none;gap:0.5rem;flex-wrap:wrap;flex-direction:row;">
+          <button id="btnSizeDown" class="btn" style="padding:0.5rem 0.75rem;font-size:0.75rem;">Size −</button>
+          <button id="btnSizeUp" class="btn" style="padding:0.5rem 0.75rem;font-size:0.75rem;">Size +</button>
+          <button id="btnNudgeUp" class="btn" style="padding:0.5rem 0.75rem;font-size:0.75rem;">Align ↑</button>
+          <button id="btnNudgeDown" class="btn" style="padding:0.5rem 0.75rem;font-size:0.75rem;">Align ↓</button>
+        </div>
+
+        <div style="position:absolute;bottom:0;left:0;width:100%;height:6px;background:rgba(255,255,255,.2);z-index:5;">
+          <div id="timerBar" style="height:100%;width:0%;background:var(--gradient-success);transition:width 0.1s linear;"></div>
+        </div>
+      </div>
+
+      <!-- Skeleton AI View -->
+      <div class="camera-view">
+        <span class="camera-label">🤖 Skeleton AI</span>
+        <canvas id="skeletonCanvas" style="background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%);"></canvas>
+      </div>
+    </div>
+
+    <!-- Control Panel -->
+    <div class="control-panel">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;margin-bottom:2rem;">
+        <!-- Left Column: Selection -->
+        <div>
+          <h3 style="font-size:1.25rem;font-weight:800;color:var(--primary);margin-bottom:1rem;">Selection</h3>
+          
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
+            <div>
+              <label style="display:block;font-weight:600;color:var(--text-primary);margin-bottom:0.5rem;font-size:0.875rem;">Category</label>
+              <select id="categorySelect" style="width:100%;padding:0.875rem;border:2px solid var(--neutral-300);border-radius:var(--radius-lg);font-size:0.9375rem;background:rgba(255,255,255,0.95);backdrop-filter:blur(10px);">
+                <option value="numbers">Numbers</option>
+                <option value="colors">Colors</option>
+                <option value="family">Family</option>
+              </select>
+            </div>
+            <div>
+              <label style="display:block;font-weight:600;color:var(--text-primary);margin-bottom:0.5rem;font-size:0.875rem;">Gesture</label>
+              <select id="gestureSelect" style="width:100%;padding:0.875rem;border:2px solid var(--neutral-300);border-radius:var(--radius-lg);font-size:0.9375rem;background:rgba(255,255,255,0.95);backdrop-filter:blur(10px);"></select>
+            </div>
+          </div>
+
+          <!-- Toggle Panel -->
+          <div class="toggle-panel">
+            <h4 style="font-size:0.875rem;font-weight:700;color:var(--text-primary);margin-bottom:0.75rem;">Display Options</h4>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+              <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
+                <input type="checkbox" id="toggleVisuals" checked style="width:18px;height:18px;cursor:pointer;">
+                <span style="font-size:0.875rem;">👁 Landmarks</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
+                <input type="checkbox" id="toggleTimer" checked style="width:18px;height:18px;cursor:pointer;">
+                <span style="font-size:0.875rem;">🕒 Timer</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
+                <input type="checkbox" id="toggleResults" checked style="width:18px;height:18px;cursor:pointer;">
+                <span style="font-size:0.875rem;">📝 Results</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
+                <input type="checkbox" id="toggleSpeed" style="width:18px;height:18px;cursor:pointer;">
+                <span style="font-size:0.875rem;">⚡ Fast Mode</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column: Status & Results -->
+        <div>
+          <h3 style="font-size:1.25rem;font-weight:800;color:var(--primary);margin-bottom:1rem;">Status & Results</h3>
+          
+          <!-- Timer Overlay -->
+          <div id="timerOverlay"
+               style="display:none;width:100%;text-align:center;font-weight:900;color:white;padding:1rem;border-radius:var(--radius-lg);margin-bottom:1rem;font-size:2rem;background:var(--gradient-primary);box-shadow:var(--shadow-lg);">
+            5
+          </div>
+
+          <!-- Selected Gesture & Result -->
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;padding:1rem;background:rgba(255,255,255,0.5);backdrop-filter:blur(10px);border-radius:var(--radius-lg);border:1px solid rgba(0,0,0,0.1);">
+            <div>
+              <div style="font-size:0.75rem;color:var(--text-muted);font-weight:600;margin-bottom:0.25rem;">Selected Gesture</div>
+              <div id="targetLabel" style="font-size:1.75rem;font-weight:900;color:var(--primary);">None</div>
+            </div>
+            <div id="resultText" style="font-size:2rem;font-weight:900;color:var(--neutral-600);">—</div>
+          </div>
+
+          <!-- Progress -->
+          <div style="margin-bottom:1.5rem;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+              <span id="capturePhase" style="font-size:0.875rem;color:var(--text-muted);font-weight:600;">Idle</span>
+              <span style="font-size:0.875rem;color:var(--text-muted);font-weight:600;"><span id="frameCount">0</span>/48 frames</span>
+            </div>
+            <div class="progress-container">
+              <div id="progressBar" class="progress-bar-custom" style="width:0%;"></div>
+            </div>
+          </div>
+
+          <!-- Assist Row -->
+          <div id="assistRow" style="display:none;margin-bottom:1.5rem;">
+            <div style="display:flex;gap:0.75rem;margin-bottom:0.75rem;">
+              <button id="btnShowHow" class="btn btn-outline" style="flex:1;padding:0.75rem;">👻 Show me how</button>
+              <button id="btnTryAgain" class="btn" style="flex:1;padding:0.75rem;">↻ Try again</button>
+            </div>
+            <div style="font-size:0.875rem;color:var(--text-muted);">
+              <span id="assistHint"></span>
+            </div>
+          </div>
+
+          <!-- Start Button -->
+          <div id="startOverlay" style="text-align:center;">
+            <button id="startBtn" class="btn" style="width:100%;padding:1rem;font-size:1.125rem;font-weight:700;">
+              ▶ Start Practice
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats Row -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:2rem;">
+        <div class="stat-card">
+          <div class="stat-number" style="color:var(--success);" id="correctCount">0</div>
+          <div style="font-size:0.875rem;color:var(--text-muted);font-weight:600;">Correct</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" style="color:var(--error);" id="incorrectCount">0</div>
+          <div style="font-size:0.875rem;color:var(--text-muted);font-weight:600;">Incorrect</div>
+        </div>
+      </div>
+
+      <p style="text-align:center;color:var(--text-muted);font-size:0.875rem;margin-top:1.5rem;margin-bottom:0;">
+        Flow: Pick gesture → Start → Get Ready (1s) → Perform (~5s) → Predict
+      </p>
+    </div>
+  </div>
+</section>
+
+          <!-- Category + Gesture selectors -->
+          <div class="row g-2 mb-3">
+            <div class="col-md-6">
+              <label class="form-label small text-muted mb-1">Category</label>
+              <select id="categorySelect" class="form-select form-select-sm">
+                <option value="numbers">Numbers</option>
+                <option value="colors">Colors</option>
+                <option value="family">Family</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small text-muted mb-1">Gesture</label>
+              <select id="gestureSelect" class="form-select form-select-sm"></select>
+            </div>
+          </div>
+
+          <!-- Numeric countdown -->
+          <div id="timerOverlay"
+              class="text-center fw-bold text-white py-2 rounded-3 mb-3 shadow-sm"
+              style="display:none;width:100%;background:#0d6efd;font-size:1.3rem;">
+            5
+          </div>
+
+          <!-- Selected Gesture + Result -->
+          <div class="d-flex justify-content-between align-items-center mb-4">
+            <div class="text-start">
+              <h6 class="text-muted mb-1">Selected Gesture</h6>
+              <p id="targetLabel" class="fs-2 text-primary fw-bold mb-0">None</p>
+            </div>
+            <div id="resultText" class="fs-3 fw-bold text-secondary">—</div>
+          </div>
+
+          <!-- Capture progress -->
+          <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span id="capturePhase" class="text-muted">Idle</span>
+              <span class="text-muted"><span id="frameCount">0</span>/48 frames</span>
+            </div>
+            <div class="progress" style="height:12px;">
+              <div id="progressBar" class="progress-bar" role="progressbar" style="width:0%"></div>
+            </div>
+          </div>
+
+          <!-- Assist / Ghost -->
+          <div id="assistRow" class="mt-3" style="display:none;">
+            <button id="btnShowHow" class="btn btn-outline-secondary btn-sm me-2">👻 Show me how</button>
+            <button id="btnTryAgain" class="btn btn-primary btn-sm">↻ Try again</button>
+            <div class="mt-2">
+              <span id="assistHint" class="text-muted small"></span>
+            </div>
+          </div>
+
+          <!-- Stats -->
+          <div class="mt-auto">
+            <div class="d-flex justify-content-around">
+              <div class="text-center">
+                <span class="text-success fw-bold fs-4" id="correctCount">0</span>
+                <p class="mb-0 text-muted">Correct</p>
+              </div>
+              <div class="text-center">
+                <span class="text-danger fw-bold fs-4" id="incorrectCount">0</span>
+                <p class="mb-0 text-muted">Incorrect</p>
+              </div>
+            </div>
+            <p class="text-muted mt-3 mb-0 small text-center">
+              Flow: Pick gesture → Start → Get Ready (1s) → Perform (~5s) → Predict.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
+
+<script>
+window.addEventListener("load", () => {
+  // =========================
+  //  SIGN SETS + SELECTION UI
+  // =========================
+  const NUMBER_SIGNS = ["One","Two","Three","Four","Five","Six","Seven","Eight","Nine","Ten"];
+  const COLOR_SIGNS  = ["Black","Blue","Brown","Dark","Gray","Green","Light","Orange","Pink","Red","Violet","White","Yellow"];
+  const FAMILY_SIGNS = ["Auntie","Uncle","Son","Daughter","Father","Mother","Grandmother","Grandfather","Cousin","Parents"];
+
+  const categorySelect = document.getElementById("categorySelect");
+  const gestureSelect  = document.getElementById("gestureSelect");
+
+  function loadGestures() {
+    gestureSelect.innerHTML = "";
+    let signs = [];
+    if (categorySelect.value === "numbers") signs = NUMBER_SIGNS;
+    if (categorySelect.value === "colors")  signs = COLOR_SIGNS;
+    if (categorySelect.value === "family")  signs = FAMILY_SIGNS;
+    signs.forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s;
+      opt.textContent = s;
+      gestureSelect.appendChild(opt);
+    });
+  }
+  categorySelect.onchange = loadGestures;
+  loadGestures();
+
+  // =========================
+  //  DOM HOOKS
+  // =========================
+  const videoEl = document.getElementById("mainCamera");
+  const canvasEl = document.getElementById("overlayCanvas");
+  const skeletonCanvas = document.getElementById("skeletonCanvas");
+  const ctx = canvasEl.getContext("2d");
+  const skeletonCtx = skeletonCanvas.getContext("2d");
+
+  const startBtn = document.getElementById("startBtn");
+  const resetBtn = document.getElementById("resetBtn");
+  const stateBadge = document.getElementById("stateBadge");
+  const targetLabel = document.getElementById("targetLabel");
+  const resultText = document.getElementById("resultText");
+  const correctCountEl = document.getElementById("correctCount");
+  const incorrectCountEl = document.getElementById("incorrectCount");
+  const capturePhase = document.getElementById("capturePhase");
+  const frameCountEl = document.getElementById("frameCount");
+  const progressBar = document.getElementById("progressBar");
+  const prepOverlay = document.getElementById("prepOverlay");
+  const recBadge = document.getElementById("recBadge");
+  const timerBar = document.getElementById("timerBar");
+
+  const toggleVisuals = document.getElementById('toggleVisuals');
+  const toggleTimer   = document.getElementById('toggleTimer');
+  const toggleResults = document.getElementById('toggleResults');
+  const toggleSpeed   = document.getElementById('toggleSpeed');
+
+  let showVisuals = true;
+  let showTimer   = true;
+  let showResults = true;
+
+  toggleVisuals.onchange = () => { showVisuals = toggleVisuals.checked; };
+  toggleTimer.onchange   = () => {
+    showTimer = toggleTimer.checked;
+    timerBar.style.display = showTimer ? 'block' : 'none';
+  };
+  toggleResults.onchange = () => {
+    showResults = toggleResults.checked;
+    resultText.style.display = showResults ? 'block' : 'none';
+  };
+
+  const STATE_READY=0, STATE_PREP=1, STATE_CAPTURE=2;
+  let state=STATE_READY;
+  function setState(s){ state=s; stateBadge.textContent="State: "+["READY","PREP","CAPTURE"][s]; }
+
+  let targetGesture=null, correctCount=0, incorrectCount=0;
+  const SEQ_LEN = 48, CAPTURE_MAX = 120;
+  const BASE_CAPTURE_MS = 5000;
+  let CAPTURE_MS = BASE_CAPTURE_MS;
+  let buf=[], running=false, frameSkip=1, frameCounter=0, autoJudge=false, captureStartMs=0;
+
+  function updateGestureDisplay(gesture) {
+    targetLabel.textContent = gesture ? gesture : 'None';
+  }
+
+  function flattenHand(lms){ if(!lms) return new Float32Array(63); const a=[]; for(let i=0;i<21;i++){ const p=lms[i]; a.push(p.x,p.y,p.z);} return new Float32Array(a); }
+  function lm(list,idx){ if(!list||idx>=list.length) return {x:NaN,y:NaN,z:NaN}; return list[idx]; }
+  function dist2D(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return Math.hypot(dx,dy)||1e-6; }
+
+  function normalizeGlobal(hand63,anchors){
+    if(!hand63||hand63.length!==63||!anchors.L_SH||!anchors.R_SH) return new Float32Array(63);
+    const out=new Float32Array(63);
+    const Cx=(anchors.L_SH.x+anchors.R_SH.x)/2;
+    const Cy=(anchors.L_SH.y+anchors.R_SH.y)/2;
+    const Cz=(anchors.L_SH.z+anchors.R_SH.z)/2;
+    const scale=Math.max(1e-6,dist2D(anchors.L_SH,anchors.R_SH));
+    for(let i=0;i<63;i+=3){
+      out[i]=(hand63[i]-Cx)/scale;
+      out[i+1]=(hand63[i+1]-Cy)/scale;
+      out[i+2]=(hand63[i+2]-Cz)/scale;
+    }
+    for(let i=0;i<63;i++) out[i]=Math.max(-5,Math.min(5,out[i]));
+    return out;
+  }
+
+  function derivedAltitudeFeatures(L,R,anchors){
+    const out=[];
+    const brow_y=0.5*(anchors.brow_r.y+anchors.brow_l.y);
+    const SEL=[0,4,8,12,16,20];
+    for(const H of [L,R]){
+      for(const j of SEL){
+        const by=j*3+1, bz=j*3+2;
+        const py=H[by], pz=H[bz];
+        out.push(py-anchors.chin.y, py-anchors.lip_u.y, py-brow_y, py-anchors.forehead.y, pz-anchors.nose.z);
+      }
+    }
+    return new Float32Array(out);
+  }
+
+  function normLabel(s){
+    if(!s) return "";
+    const x = String(s).toLowerCase().replace(/[^a-z0-9]+/g,'');
+    const map = {
+      "1":"one","2":"two","3":"three","4":"four","5":"five","6":"six","7":"seven","8":"eight","9":"nine","10":"ten",
+      "grandmother":"grandmother","grandma":"grandmother","lola":"grandmother",
+      "grandfather":"grandfather","grandpa":"grandfather","lolo":"grandfather",
+      "mom":"mother","mother":"mother","nanay":"mother",
+      "dad":"father","father":"father","tatay":"father",
+      "aunt":"auntie","auntie":"auntie","tita":"auntie",
+      "uncle":"uncle","tito":"uncle",
+      "boy":"son","girl":"daughter",
+      "purple":"violet","violet":"violet","grey":"gray","gray":"gray",
+      "light":"light","dark":"dark",
+      "white":"white","black":"black","blue":"blue","brown":"brown","green":"green","orange":"orange","pink":"pink","red":"red","yellow":"yellow"
+    };
+    return map[x] || x;
+  }
+  function inferCategory(label){
+    const l = normLabel(label);
+    if (["one","two","three","four","five","six","seven","eight","nine","ten"].includes(l)) return "numbers";
+    if (["auntie","uncle","son","daughter","father","mother","grandmother","grandfather","cousin","parents"].includes(l)) return "family";
+    return "colors";
+  }
+
+  function packFeature(res){
+    const pose=res.poseLandmarks||[], face=res.faceLandmarks||[];
+    const anchors={};
+    anchors.L_SH=lm(pose,11); anchors.R_SH=lm(pose,12);
+    anchors.nose=lm(face,1); anchors.forehead=lm(face,10);
+    anchors.lip_u=lm(face,13); anchors.brow_r=lm(face,65); anchors.brow_l=lm(face,295);
+    anchors.chin=lm(face,152);
+    const Lh=res.rightHandLandmarks?flattenHand(res.rightHandLandmarks):null;
+    const Rh=res.leftHandLandmarks?flattenHand(res.leftHandLandmarks):null;
+    const lf=Lh?1:0, rf=Rh?1:0;
+    if(!Lh && !Rh) return null;
+    const L=normalizeGlobal(Lh,anchors), R=normalizeGlobal(Rh,anchors);
+    const alt=derivedAltitudeFeatures(L,R,anchors);
+    return new Float32Array([...L,...R,...alt,lf,rf]);
+  }
+
+  function temporalFix(frames,seqLen){
+    if(frames.length<=seqLen){
+      const pad=Array.from({length:seqLen-frames.length},()=>frames[frames.length-1]);
+      return frames.concat(pad);
+    }
+    const scores=new Array(frames.length).fill(0);
+    for(let i=1;i<frames.length;i++){
+      const f0=frames[i-1], f1=frames[i]; if(!f0||!f1) continue;
+      let motion=0; for(let j=0;j<f0.length-2;j++) motion+=Math.abs(f1[j]-f0[j]);
+      motion/=(f0.length-2);
+      const presence=f1[f1.length-2]+f1[f1.length-1];
+      scores[i]=0.7*motion+0.3*presence;
+    }
+    const W=Math.min(40,frames.length);
+    let bestStart=0, bestSum=-1e9, runSum=0;
+    for(let i=0;i<W;i++) runSum+=scores[i]; bestSum=runSum;
+    for(let i=1;i<=scores.length-W;i++){
+      runSum+=scores[i+W-1]-scores[i-1];
+      if(runSum>bestSum){bestSum=runSum; bestStart=i;}
+    }
+    const selected=frames.slice(bestStart,bestStart+W);
+    const step=selected.length/seqLen;
+    const aligned=[];
+    for(let i=0;i<seqLen;i++){
+      const idx=Math.min(Math.floor(i*step),selected.length-1);
+      aligned.push(selected[idx]);
+    }
+    return aligned;
+  }
+
+  function updateBuffer(f){
+    if(buf.length<CAPTURE_MAX) buf.push(f);
+    else { buf.shift(); buf.push(f); }
+    frameCountEl.textContent=Math.min(buf.length,SEQ_LEN);
+    progressBar.style.width=Math.min(100,Math.round((buf.length/CAPTURE_MAX)*100))+"%";
+    if(state===STATE_CAPTURE && captureStartMs){
+      const t=Math.max(0,Math.min(1,(Date.now()-captureStartMs)/CAPTURE_MS));
+      if (showTimer) timerBar.style.width=(t*100).toFixed(1)+'%';
+    } else {
+      timerBar.style.width='0%';
+    }
+    if(buf.length>=CAPTURE_MAX && !autoJudge){
+      autoJudge=true; setTimeout(()=>stopAndPredict(),200);
+    }
+  }
+
+  // ======= PREDICT =======
+  const PREDICT_URL = location.origin + '/predict';
+  async function callPredict(sequence) {
+    const payload = { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ sequence }) };
+    const res = await fetch(PREDICT_URL, payload);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  function extractPredictedLabel(j){
+    let predicted = j?.prediction || j?.label || j?.pred?.label || j?.pred?.class;
+    if (!predicted && Array.isArray(j?.topk) && j.topk.length) {
+      predicted = j.topk[0].label || j.topk[0].class || j.topk[0].name;
+    }
+    if (typeof predicted === "string" && predicted.includes("_")) {
+      predicted = predicted.split("_").pop();
+    }
+    return normLabel(predicted);
+  }
+
+  async function predictOnce(silent=false){
+    if (buf.length < 20) {
+      if (!silent) alert('Not enough data.');
+      return { predicted: null, raw: null };
+    }
+    const fixed = temporalFix(buf, SEQ_LEN);
+    const seq = fixed.flatMap(f => Array.from(f));
+
+    try {
+      const j = await callPredict(seq);
+      const predicted = extractPredictedLabel(j);
+
+      if (!silent) {
+        const target = normLabel(targetGesture || '');
+        if (predicted && target && predicted === target) {
+          correctCount++;
+          resultText.textContent = '✅ Correct!';
+          resultText.className = 'fs-4 fw-bold text-success';
+          correctCountEl.textContent = String(correctCount);
+          document.getElementById("assistRow").style.display = 'none';
+        } else {
+          incorrectCount++;
+          resultText.textContent = '❌ Incorrect';
+          resultText.className = 'fs-4 fw-bold text-danger';
+          incorrectCountEl.textContent = String(incorrectCount);
+          const assistRow = document.getElementById("assistRow");
+          const assistHint = document.getElementById("assistHint");
+          assistRow.style.display = 'block';
+          assistHint.textContent = 'Watch the overlay, then try again.';
+        }
+      }
+      return { predicted, raw: j };
+    } catch (e) {
+      console.error(e);
+      if (!silent) {
+        resultText.textContent = '⚠️ Prediction error';
+        resultText.className = 'fs-4 fw-bold text-warning';
+        const assistRow = document.getElementById("assistRow");
+        const assistHint = document.getElementById("assistHint");
+        assistRow.style.display = 'block';
+        assistHint.textContent = 'Check that the backend is running and reachable.';
+      }
+      return { predicted: null, raw: null };
+    }
+  }
+
+  async function stopAndPredict() {
+    if (state !== STATE_CAPTURE && state !== STATE_PREP) return;
+    running = false;
+    recBadge.style.display = "none";
+    await predictOnce(false);
+    setState(STATE_READY);
+    capturePhase.textContent = "Idle";
+    startBtn.style.display = "inline-block";
+    timerBar.style.width = "0%";
+    stopNumericTimer();
+  }
+
+  // ======= GHOST OVERLAY - Now shows in Skeleton AI box =======
+  const HAND_CONN = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[0,9],[9,10],[10,11],[11,12],[0,13],[13,14],[14,15],[15,16],[0,17],[17,18],[18,19],[19,20]];
+  const POSE_CONNECTIONS = [
+    [11, 12], [11, 13], [13, 15], [15, 17], [15, 19], [15, 21], [17, 19],
+    [12, 14], [14, 16], [16, 18], [16, 20], [16, 22], [18, 20],
+    [11, 23], [12, 24], [23, 24],
+    [23, 25], [24, 26], [25, 27], [26, 28], [27, 29], [28, 30], [29, 31], [30, 32]
+  ];
+  let ghostEnabled=false, ghostFrames=null, ghostIdx=0, ghostReady=false;
+  let previewMode=false;
+  let scaleMultiplier = 1.0;
+  let yOffset = 0;
+  let ghostPlaybackSpeed = 0.3;
+
+  const ghostBadge = document.getElementById("ghostBadge");
+  const ghostControls = document.getElementById("ghostControls");
+  const btnSizeDown = document.getElementById("btnSizeDown");
+  const btnSizeUp = document.getElementById("btnSizeUp");
+  const btnNudgeUp = document.getElementById("btnNudgeUp");
+  const btnNudgeDown = document.getElementById("btnNudgeDown");
+
+  function showGhostUI(show){
+    ghostBadge.style.display = show ? 'inline-block' : 'none';
+    ghostControls.style.display = show ? 'flex' : 'none';
+    if (show) {
+      ghostControls.style.flexDirection = 'row';
+      ghostControls.style.flexWrap = 'wrap';
+    }
+  }
+
+  btnSizeUp.onclick    = () => { scaleMultiplier = Math.min(1.6, scaleMultiplier + 0.04); };
+  btnSizeDown.onclick  = () => { scaleMultiplier = Math.max(0.7, scaleMultiplier - 0.04); };
+  btnNudgeUp.onclick   = () => { yOffset -= 0.01; };
+  btnNudgeDown.onclick = () => { yOffset += 0.01; };
+
+  window.addEventListener('keydown', (e) => {
+    if(!ghostEnabled) return;
+    if(e.key === '=' || e.key === '+') { scaleMultiplier = Math.min(1.6, scaleMultiplier + 0.04); }
+    if(e.key === '-') { scaleMultiplier = Math.max(0.7, scaleMultiplier - 0.04); }
+    if(e.key === 'ArrowUp') { yOffset -= 0.01; }
+    if(e.key === 'ArrowDown') { yOffset += 0.01; }
+  });
+
+  function anchorsValid(a){
+    if(!a || !a.L_SH || !a.R_SH) return false;
+    return Number.isFinite(a.L_SH.x) && Number.isFinite(a.R_SH.x) &&
+           Number.isFinite(a.L_SH.y) && Number.isFinite(a.R_SH.y) &&
+           dist2D(a.L_SH, a.R_SH) > 0.02;
+  }
+
+  async function startPreviewIfNeeded(){
+    if(state!==STATE_CAPTURE && !previewMode){
+      previewMode=true;
+      capturePhase.textContent='Preview (overlay)…';
+      setState(STATE_READY);
+      timerBar.style.width='0%';
+      await camera.start();
+    }
+  }
+  async function stopPreviewIfAny(){
+    if(previewMode){
+      previewMode=false;
+      capturePhase.textContent='Idle';
+      try{ await camera.stop(); }catch(_){}
+    }
+  }
+
+  async function findDemoUrl(cat, key){
+    const STATIC_BASE = (window.location.origin + '/static/video').replace(/\/+$/, '');
+    const names=[];
+    for(let i=1;i<=10;i++) names.push(key + '_' + String(i).padStart(2,'0') + '.mp4');
+    names.push(key + '.mp4');
+    for(const n of names){
+      const url = STATIC_BASE + '/' + cat + '/' + n;
+      try{
+        const r=await fetch(url,{method:'HEAD',cache:'no-store'});
+        if(r.ok) return url;
+      }catch(_){}
+    }
+    return null;
+  }
+
+  function drawGhostHand(norm63, anchors, targetCtx, color){
+    if (!norm63) return;
+    const baseScale=Math.max(1e-6, dist2D(anchors.L_SH, anchors.R_SH));
+    const scale = baseScale * scaleMultiplier;
+    const Cx=(anchors.L_SH.x+anchors.R_SH.x)/2;
+    const Cy=(anchors.L_SH.y+anchors.R_SH.y)/2 + yOffset;
+    const pts=[];
+    for (let i=0;i<63;i+=3){
+      const x = norm63[i  ]*scale + Cx;
+      const y = norm63[i+1]*scale + Cy;
+      pts.push({x:x, y:y});
+    }
+    targetCtx.save();
+    targetCtx.globalCompositeOperation='screen';
+    targetCtx.strokeStyle=color;
+    targetCtx.lineWidth=4.5;
+    targetCtx.fillStyle=color;
+    targetCtx.shadowBlur=18;
+    targetCtx.shadowColor=color;
+    const W=canvasEl.width, H=canvasEl.height;
+    for (let k=0;k<HAND_CONN.length;k++){
+      const a=HAND_CONN[k][0], b=HAND_CONN[k][1];
+      const p=pts[a], q=pts[b];
+      targetCtx.beginPath(); targetCtx.moveTo(p.x*W, p.y*H); targetCtx.lineTo(q.x*W, q.y*H); targetCtx.stroke();
+    }
+    for (let i=0;i<pts.length;i++){
+      const p=pts[i]; targetCtx.beginPath(); targetCtx.arc(p.x*W, p.y*H, 5.2, 0, Math.PI*2); targetCtx.fill();
+    }
+    targetCtx.restore();
+  }
+
+  async function loadGhostFor(label){
+    const cat=inferCategory(label);
+    const key=normLabel(label);
+    const assistHint = document.getElementById("assistHint");
+    assistHint.textContent='Loading correct gesture skeleton…';
+    showGhostUI(false);
+    const url=await findDemoUrl(cat,key);
+    if(!url){ assistHint.textContent='No demo found for '+cat+'/'+key; ghostReady=false; return false; }
+    const v=document.createElement('video');
+    v.src=url; v.muted=true; v.playsInline=true; v.crossOrigin='anonymous';
+    await new Promise((resolve,reject)=>{ v.onloadedmetadata=resolve; v.onerror=()=>reject(new Error('Video error')); });
+    const ghostHolistic=new Holistic({locateFile:function(f){ return 'https://cdn.jsdelivr.net/npm/@mediapipe/holistic/'+f; }});
+    ghostHolistic.setOptions({selfieMode:false,modelComplexity:1,smoothLandmarks:true,refineFaceLandmarks:false,minDetectionConfidence:0.5,minTrackingConfidence:0.5});
+    ghostFrames=[];
+    ghostHolistic.onResults(res=>{
+      // Store full skeleton data for drawing on skeleton canvas
+      ghostFrames.push({
+        pose: res.poseLandmarks || [],
+        face: res.faceLandmarks || [],
+        rightHand: res.rightHandLandmarks || [],
+        leftHand: res.leftHandLandmarks || []
+      });
+    });
+    const total=Math.min(30, Math.max(15, Math.floor(v.duration*10)));
+    for(let i=0;i<total;i++){
+      v.currentTime = (v.duration * i)/total;
+      await new Promise(function(r){ v.onseeked=r; });
+      await ghostHolistic.send({image:v});
+    }
+    ghostReady = ghostFrames.length>0;
+    assistHint.textContent = ghostReady ? 'Correct gesture skeleton loaded! Watch the Skeleton AI box.' : 'No skeleton detected in demo video.';
+    return ghostReady;
+  }
+  
+  function drawGhostSkeleton(frame){
+    if(!frame || !ghostReady) return;
+    
+    skeletonCtx.save();
+    skeletonCtx.clearRect(0, 0, skeletonCanvas.width, skeletonCanvas.height);
+    
+    // Draw pose skeleton
+    if(frame.pose && frame.pose.length > 0){
+      skeletonCtx.strokeStyle = 'rgba(59, 130, 246, 0.9)';
+      skeletonCtx.lineWidth = 3;
+      skeletonCtx.shadowBlur = 10;
+      skeletonCtx.shadowColor = 'rgba(59, 130, 246, 0.5)';
+      
+      POSE_CONNECTIONS.forEach(([start, end]) => {
+        const startPoint = frame.pose[start];
+        const endPoint = frame.pose[end];
+        if(startPoint && endPoint){
+          skeletonCtx.beginPath();
+          skeletonCtx.moveTo(startPoint.x * skeletonCanvas.width, startPoint.y * skeletonCanvas.height);
+          skeletonCtx.lineTo(endPoint.x * skeletonCanvas.width, endPoint.y * skeletonCanvas.height);
+          skeletonCtx.stroke();
+        }
+      });
+      
+      // Draw pose landmarks
+      frame.pose.forEach((landmark) => {
+        skeletonCtx.fillStyle = 'rgba(59, 130, 246, 1)';
+        skeletonCtx.beginPath();
+        skeletonCtx.arc(landmark.x * skeletonCanvas.width, landmark.y * skeletonCanvas.height, 5, 0, 2 * Math.PI);
+        skeletonCtx.fill();
+      });
+    }
+    
+    // Draw face landmarks (simplified)
+    if(frame.face && frame.face.length > 0){
+      skeletonCtx.strokeStyle = 'rgba(249, 115, 22, 0.6)';
+      skeletonCtx.lineWidth = 1;
+      frame.face.forEach((landmark, idx) => {
+        if(idx % 10 === 0){ // Draw every 10th point for performance
+          skeletonCtx.fillStyle = 'rgba(249, 115, 22, 0.8)';
+          skeletonCtx.beginPath();
+          skeletonCtx.arc(landmark.x * skeletonCanvas.width, landmark.y * skeletonCanvas.height, 2, 0, 2 * Math.PI);
+          skeletonCtx.fill();
+        }
+      });
+    }
+    
+    // Draw hands
+    const drawHand = (landmarks, color) => {
+      if(!landmarks || landmarks.length === 0) return;
+      
+      skeletonCtx.strokeStyle = color;
+      skeletonCtx.lineWidth = 3;
+      skeletonCtx.shadowBlur = 8;
+      skeletonCtx.shadowColor = color;
+      
+      HAND_CONN.forEach(([start, end]) => {
+        const startPoint = landmarks[start];
+        const endPoint = landmarks[end];
+        if(startPoint && endPoint){
+          skeletonCtx.beginPath();
+          skeletonCtx.moveTo(startPoint.x * skeletonCanvas.width, startPoint.y * skeletonCanvas.height);
+          skeletonCtx.lineTo(endPoint.x * skeletonCanvas.width, endPoint.y * skeletonCanvas.height);
+          skeletonCtx.stroke();
+        }
+      });
+      
+      landmarks.forEach((landmark) => {
+        skeletonCtx.fillStyle = color;
+        skeletonCtx.beginPath();
+        skeletonCtx.arc(landmark.x * skeletonCanvas.width, landmark.y * skeletonCanvas.height, 4, 0, 2 * Math.PI);
+        skeletonCtx.fill();
+      });
+    };
+    
+    if(frame.rightHand && frame.rightHand.length > 0){
+      drawHand(frame.rightHand, 'rgba(34, 197, 94, 0.95)');
+    }
+    if(frame.leftHand && frame.leftHand.length > 0){
+      drawHand(frame.leftHand, 'rgba(239, 68, 68, 0.95)');
+    }
+    
+    skeletonCtx.restore();
+  }
+
+  let ghostTimer=null;
+  const GHOST_DURATION_MS=12000;
+
+  let ghostAnimationId = null;
+  
+  document.getElementById("btnShowHow").onclick = async () => {
+    if(!targetGesture) {
+      alert('Please select a gesture first.');
+      return;
+    }
+    
+    // Stop any existing animation
+    if(ghostAnimationId) {
+      cancelAnimationFrame(ghostAnimationId);
+      ghostAnimationId = null;
+    }
+    
+    ghostEnabled=true; ghostFrames=null; ghostReady=false; ghostIdx=0;
+    const ok = await loadGhostFor(targetGesture);
+    if (ok){
+      showGhostUI(true);
+      // Start animation loop for skeleton
+      const animateGhost = () => {
+        if(ghostEnabled && ghostReady && ghostFrames && ghostFrames.length){
+          const total=ghostFrames.length;
+          ghostIdx+=ghostPlaybackSpeed; 
+          if(ghostIdx>=total) ghostIdx=0;
+          const frameIdx = Math.floor(ghostIdx) % total;
+          drawGhostSkeleton(ghostFrames[frameIdx]);
+          ghostAnimationId = requestAnimationFrame(animateGhost);
+        } else {
+          ghostAnimationId = null;
+        }
+      };
+      animateGhost();
+      
+      if (ghostTimer) clearTimeout(ghostTimer);
+      ghostTimer=setTimeout(() => {
+        ghostEnabled=false; 
+        ghostReady=false;
+        showGhostUI(false); 
+        document.getElementById("assistHint").textContent='';
+        if(ghostAnimationId) {
+          cancelAnimationFrame(ghostAnimationId);
+          ghostAnimationId = null;
+        }
+        // Clear skeleton canvas - will show live skeleton again
+        skeletonCtx.clearRect(0, 0, skeletonCanvas.width, skeletonCanvas.height);
+      }, GHOST_DURATION_MS);
+    }else{
+      ghostEnabled=false; showGhostUI(false);
+    }
+  };
+
+  document.getElementById("btnTryAgain").onclick = async () => {
+    ghostEnabled=false; 
+    ghostReady=false;
+    showGhostUI(false); 
+    document.getElementById("assistHint").textContent='';
+    if(ghostAnimationId) {
+      cancelAnimationFrame(ghostAnimationId);
+      ghostAnimationId = null;
+    }
+    // Clear skeleton canvas
+    skeletonCtx.clearRect(0, 0, skeletonCanvas.width, skeletonCanvas.height);
+    await stopPreviewIfAny();
+    resultText.textContent='—';
+    startBtn.click();
+  };
+
+  // ======= MEDIAPIPE HOOK =======
+  const holistic=new Holistic({locateFile:function(f){ return 'https://cdn.jsdelivr.net/npm/@mediapipe/holistic/'+f; }});
+  holistic.setOptions({selfieMode:false,modelComplexity:2,smoothLandmarks:true,refineFaceLandmarks:false,minDetectionConfidence:0.55,minTrackingConfidence:0.55});
+
+  holistic.onResults(function(res){
+    // Main camera overlay (minimal - just boxes/landmarks if enabled)
+    ctx.save();
+    ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+    ctx.drawImage(res.image, 0, 0, canvasEl.width, canvasEl.height);
+
+    const pose = res.poseLandmarks || [];
+    const face = res.faceLandmarks || [];
+    const anchors = {};
+    anchors.L_SH = lm(pose, 11);
+    anchors.R_SH = lm(pose, 12);
+    anchors.nose = lm(face, 1);
+    anchors.forehead = lm(face, 10);
+    anchors.lip_u = lm(face, 13);
+    anchors.brow_r = lm(face, 65);
+    anchors.brow_l = lm(face, 295);
+    anchors.chin = lm(face, 152);
+
+    if (showVisuals) {
+      const RH = res.rightHandLandmarks;
+      const LH = res.leftHandLandmarks;
+
+      const drawBox = (landmarks, color) => {
+        if (!landmarks || !landmarks.length) return;
+        let minX = 1, minY = 1, maxX = 0, maxY = 0;
+        landmarks.forEach(p => {
+          minX = Math.min(minX, p.x);
+          maxX = Math.max(maxX, p.x);
+          minY = Math.min(minY, p.y);
+          maxY = Math.max(maxY, p.y);
+        });
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.strokeRect(
+          minX * canvasEl.width,
+          minY * canvasEl.height,
+          (maxX - minX) * canvasEl.width,
+          (maxY - minY) * canvasEl.height
+        );
+        ctx.fillStyle = color;
+        landmarks.forEach(p => {
+          ctx.beginPath();
+          ctx.arc(p.x * canvasEl.width, p.y * canvasEl.height, 4, 0, 2 * Math.PI);
+          ctx.fill();
+        });
+      };
+
+      if (RH) drawBox(RH, 'rgba(0,255,0,0.8)');
+      if (LH) drawBox(LH, 'rgba(255,0,0,0.8)');
+    }
+
+    // Skeleton Canvas - Show live skeleton OR ghost skeleton
+    // Only draw live skeleton if ghost is not enabled
+    if (!ghostEnabled) {
+      skeletonCtx.save();
+      skeletonCtx.clearRect(0, 0, skeletonCanvas.width, skeletonCanvas.height);
+      
+      // Draw skeleton pose
+      if (pose && pose.length > 0) {
+        skeletonCtx.strokeStyle = 'rgba(59, 130, 246, 0.8)';
+        skeletonCtx.lineWidth = 3;
+        skeletonCtx.shadowBlur = 5;
+        skeletonCtx.shadowColor = 'rgba(59, 130, 246, 0.3)';
+        
+        POSE_CONNECTIONS.forEach(([start, end]) => {
+          const startPoint = pose[start];
+          const endPoint = pose[end];
+          if (startPoint && endPoint) {
+            skeletonCtx.beginPath();
+            skeletonCtx.moveTo(startPoint.x * skeletonCanvas.width, startPoint.y * skeletonCanvas.height);
+            skeletonCtx.lineTo(endPoint.x * skeletonCanvas.width, endPoint.y * skeletonCanvas.height);
+            skeletonCtx.stroke();
+          }
+        });
+        
+        // Draw pose landmarks
+        pose.forEach((landmark) => {
+          skeletonCtx.fillStyle = 'rgba(59, 130, 246, 0.9)';
+          skeletonCtx.beginPath();
+          skeletonCtx.arc(landmark.x * skeletonCanvas.width, landmark.y * skeletonCanvas.height, 4, 0, 2 * Math.PI);
+          skeletonCtx.fill();
+        });
+      }
+      
+      // Draw face landmarks
+      if (face && face.length > 0) {
+        skeletonCtx.strokeStyle = 'rgba(249, 115, 22, 0.6)';
+        skeletonCtx.lineWidth = 1;
+        face.forEach((landmark, idx) => {
+          if (idx % 10 === 0) { // Draw every 10th point for performance
+            skeletonCtx.fillStyle = 'rgba(249, 115, 22, 0.7)';
+            skeletonCtx.beginPath();
+            skeletonCtx.arc(landmark.x * skeletonCanvas.width, landmark.y * skeletonCanvas.height, 2, 0, 2 * Math.PI);
+            skeletonCtx.fill();
+          }
+        });
+      }
+      
+      // Draw hand landmarks
+      const drawHand = (landmarks, color) => {
+        if (!landmarks || landmarks.length === 0) return;
+        
+        skeletonCtx.strokeStyle = color;
+        skeletonCtx.lineWidth = 2;
+        skeletonCtx.shadowBlur = 5;
+        skeletonCtx.shadowColor = color;
+        
+        HAND_CONN.forEach(([start, end]) => {
+          const startPoint = landmarks[start];
+          const endPoint = landmarks[end];
+          if (startPoint && endPoint) {
+            skeletonCtx.beginPath();
+            skeletonCtx.moveTo(startPoint.x * skeletonCanvas.width, startPoint.y * skeletonCanvas.height);
+            skeletonCtx.lineTo(endPoint.x * skeletonCanvas.width, endPoint.y * skeletonCanvas.height);
+            skeletonCtx.stroke();
+          }
+        });
+        
+        landmarks.forEach((landmark) => {
+          skeletonCtx.fillStyle = color;
+          skeletonCtx.beginPath();
+          skeletonCtx.arc(landmark.x * skeletonCanvas.width, landmark.y * skeletonCanvas.height, 3, 0, 2 * Math.PI);
+          skeletonCtx.fill();
+        });
+      };
+      
+      if (res.rightHandLandmarks) drawHand(res.rightHandLandmarks, 'rgba(34, 197, 94, 0.9)');
+      if (res.leftHandLandmarks) drawHand(res.leftHandLandmarks, 'rgba(239, 68, 68, 0.9)');
+      
+      skeletonCtx.restore();
+    }
+
+    // Ghost skeleton overlay - Draw on skeleton canvas when enabled
+    if (ghostEnabled && ghostReady && ghostFrames && ghostFrames.length){
+      const total=ghostFrames.length;
+      ghostIdx+=ghostPlaybackSpeed; 
+      if(ghostIdx>=total) ghostIdx=0;
+      
+      const frameIdxA = Math.floor(ghostIdx) % total;
+      const frameIdxB = Math.floor(ghostIdx + 1) % total;
+      const t = ghostIdx % 1;
+      
+      // Interpolate between frames for smooth animation
+      const frameA = ghostFrames[frameIdxA];
+      const frameB = ghostFrames[frameIdxB];
+      
+      // Draw interpolated skeleton on skeleton canvas
+      drawGhostSkeleton(frameA); // For now, just draw current frame
+      
+      showGhostUI(true);
+    } else {
+      showGhostUI(false);
+    }
+
+    ctx.restore();
+
+    if (running && state === STATE_CAPTURE) {
+      frameCounter++;
+      if (frameCounter % frameSkip === 0) {
+        const feat = packFeature(res);
+        if (feat) updateBuffer(feat);
+      }
+
+      const elapsed = Date.now() - captureStartMs;
+      if (elapsed >= CAPTURE_MS && autoJudge === false) {
+        autoJudge = true;
+        setTimeout(() => stopAndPredict(), 80);
+      }
+    }
+  });
+
+  // ======= CAMERA =======
+  const camera=new Camera(videoEl,{ onFrame:async function(){ await holistic.send({image:videoEl}); }, width:640, height:480 });
+
+  // ======= START / RESET =======
+  const originalStart = () => {
+    const fastMode = toggleSpeed.checked;
+    CAPTURE_MS = fastMode ? 3000 : BASE_CAPTURE_MS;
+
+    const chosen = gestureSelect.value;
+    if (!chosen) {
+      alert("Please select a gesture first.");
+      return;
+    }
+    targetGesture = chosen;
+    updateGestureDisplay(targetGesture);
+
+    buf = [];
+    frameCounter = 0;
+    autoJudge = false;
+    setState(STATE_PREP);
+
+    prepOverlay.style.display = "block";
+    recBadge.style.display = "none";
+    startBtn.style.display = "none";
+    resultText.textContent = "—";
+    capturePhase.textContent = "Get Ready…";
+    running = true;
+    camera.start();
+    timerBar.style.width = "0%";
+    document.getElementById("assistRow").style.display = "none";
+
+    setTimeout(function () {
+      setState(STATE_CAPTURE);
+      prepOverlay.style.display = "none";
+      recBadge.style.display = "inline-block";
+      capturePhase.textContent = "Perform Now (~5 s)…";
+      captureStartMs = Date.now();
+      startNumericTimer(toggleSpeed.checked);
+    }, 1000);
+  };
+
+  startBtn.onclick = async () => { await stopPreviewIfAny(); originalStart(); };
+
+  const originalReset = () => {
+    correctCount=0; incorrectCount=0;
+    correctCountEl.textContent='0'; incorrectCountEl.textContent='0';
+    targetGesture=null; updateGestureDisplay(null); resultText.textContent='—';
+    document.getElementById("assistRow").style.display='none';
+    document.getElementById("assistHint").textContent='';
+    ghostEnabled=false; ghostFrames=null; ghostIdx=0; ghostReady=false; showGhostUI(false);
+    // Stop ghost animation
+    if(ghostAnimationId) {
+      cancelAnimationFrame(ghostAnimationId);
+      ghostAnimationId = null;
+    }
+    // Clear skeleton canvas
+    skeletonCtx.clearRect(0, 0, skeletonCanvas.width, skeletonCanvas.height);
+    if (ghostTimer) clearTimeout(ghostTimer);
+    buf=[]; frameCounter=0; frameCountEl.textContent='0'; progressBar.style.width='0%'; timerBar.style.width='0%';
+    capturePhase.textContent='Idle'; setState(STATE_READY);
+    stopNumericTimer();
+    startBtn.style.display='inline-block';
+    scaleMultiplier=1.0; yOffset=0; ghostPlaybackSpeed=0.3;
+  };
+  resetBtn.onclick = async () => { await stopPreviewIfAny(); originalReset(); };
+
+  let tickInterval = null;
+  const timerOverlay = document.getElementById("timerOverlay");
+
+  function startNumericTimer(fastMode) {
+    if (!showTimer) return;
+    clearInterval(tickInterval);
+
+    let countdown = fastMode ? 3 : 5;
+    timerOverlay.textContent = countdown;
+    timerOverlay.style.display = "block";
+    timerOverlay.style.background = "#0d6efd";
+
+    tickInterval = setInterval(() => {
+      countdown--;
+      if (countdown <= 0) {
+        timerOverlay.textContent = "0";
+        timerOverlay.style.background = "#dc3545";
+        clearInterval(tickInterval);
+        setTimeout(() => (timerOverlay.style.display = "none"), 600);
+        return;
+      }
+      timerOverlay.textContent = countdown;
+      if (countdown <= 1) timerOverlay.style.background = "#dc3545";
+      else if (countdown <= 2) timerOverlay.style.background = "#fd7e14";
+      else timerOverlay.style.background = "#0d6efd";
+    }, 1000);
+  }
+
+  function stopNumericTimer() {
+    clearInterval(tickInterval);
+    timerOverlay.style.display = "none";
+  }
+
+  function resize(){
+    canvasEl.width = videoEl.clientWidth;
+    canvasEl.height = videoEl.clientHeight;
+    
+    // Resize skeleton canvas to match its container
+    const skeletonContainer = skeletonCanvas.parentElement;
+    skeletonCanvas.width = skeletonContainer.clientWidth;
+    skeletonCanvas.height = skeletonContainer.clientHeight;
+  }
+  
+  // Resize observers
+  new ResizeObserver(resize).observe(videoEl);
+  new ResizeObserver(resize).observe(skeletonCanvas.parentElement);
+  
+  // Initial resize
+  resize();
+  
+  // Also resize on window resize
+  window.addEventListener('resize', resize);
+});
+</script>
+
+{% endblock %}

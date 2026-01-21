@@ -1,0 +1,560 @@
+{% extends "base.html" %}
+{% block title %}Auto Recognition – FSL Learning{% endblock %}
+<!-- Cache bust: {{ range(1, 2)|random }} -->
+{% block content %}
+
+<section class="section py-5" style="min-height:90vh;background:rgba(250,250,255,0.7);backdrop-filter:blur(6px);">
+  <div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h4 class="fw-bold text-primary mb-0">🤖 Auto Recognition Mode</h4>
+      <span id="stateBadge" class="badge bg-secondary text-dark fs-6 px-3 py-2 shadow-sm">State: READY</span>
+    </div>
+
+    <div class="row g-4 align-items-stretch mb-4">
+      <!-- Camera -->
+      <div class="col-lg-7 position-relative">
+        <div class="card shadow-sm border-0 h-100 rounded-4 position-relative overflow-hidden">
+          <video id="cam" autoplay playsinline muted
+                 style="width:100%;height:100%;background:#000;aspect-ratio:4/3;
+                        border-radius:1rem;object-fit:cover;"></video>
+          <canvas id="overlay" style="position:absolute;inset:0;pointer-events:none;"></canvas>
+
+          <!-- LIVE -->
+          <div id="recBadge"
+               class="position-absolute top-0 start-0 m-3 px-3 py-1 rounded-pill fw-bold"
+               style="display:none;z-index:11;background:#b10000;color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.3);">
+            ● LIVE
+          </div>
+
+          <!-- RESULT (TOP-CENTER INSIDE CAMERA) -->
+          <div id="gestureOverlay"
+               style="position: absolute; top: 5%; left: 50%; transform: translateX(-50%); display: none; z-index: 12; padding: 8px 16px; border-radius: 12px; font-weight: 600; color: white; box-shadow: 0 2px 10px rgba(0,0,0,0.3); background: rgba(0,0,0,0.75);">—</div>
+
+          <!-- TIMER (TOP-RIGHT) -->
+          <div id="timerOverlay"
+               class="position-absolute top-0 end-0 m-3 px-3 py-2 rounded-3 fw-bold text-white shadow text-center"
+               style="display:none;z-index:12;background:#0d6efd;font-size:1.2rem;">5</div>
+
+          <!-- GHOST BADGE (TOP-RIGHT, BELOW TIMER) -->
+          <div id="ghostBadge"
+               class="position-absolute top-0 end-0 m-3 px-3 py-1 rounded-pill fw-bold"
+               style="display:none;z-index:12;background:rgba(59,130,246,.95);color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.3);margin-top:3rem;">
+            👻 Ghost ON
+          </div>
+
+          <!-- RECOGNITION SETTINGS (LEFT SIDE INSIDE CAMERA) -->
+          <div style="position: absolute; top: 15%; left: 5%; transform: translateY(-50%); z-index: 10; max-width: 250px; font-size: 0.85rem; color: rgb(0, 0, 0); border: 2px solid rgba(0, 0, 0, 0.8); background: rgba(255, 255, 255, 0.8);" class="p-6 rounded-6">
+            <div class="mb-2">
+              <label class="d-flex align-items-center mb-1">
+                <input type="checkbox" id="toggleVisuals" checked class="me-2">
+                <span>� Landmarks & Boxes</span>
+              </label>
+            </div>
+            <div class="mb-2">
+              <label class="d-flex align-items-center mb-1">
+                <input type="checkbox" id="toggleTimer" checked class="me-2">
+                <span>🕒 Timer</span>
+              </label>
+            </div>
+            <div class="mb-2">
+              <label class="d-flex align-items-center mb-1">
+                <input type="checkbox" id="toggleResults" checked class="me-2">
+                <span> 📝 Results</span>
+              </label>
+            </div>
+            <div class="mb-0">
+              <label class="d-flex align-items-center mb-1">
+                <input type="checkbox" id="toggleSpeed" class="me-2">
+                <span>⚡ Fast Mode (3s)</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Start Button Overlay - positioned inside camera display -->
+          <div id="startOverlay" style="position: absolute; top: 85%; left: 50%; transform: translate(-50%, -50%); z-index: 9; width: 100%; text-align: center;">
+            <button id="startBtn" style="background: #131f8b; color: white; border: none; border-radius: 8px; padding: 12px 24px; font-size: 16px; font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,0.3); cursor: pointer;">▶ Start</button>
+            <button id="stopBtn" style="background: #dc3545; color: white; border: none; border-radius: 8px; padding: 12px 24px; font-size: 16px; font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,0.3); cursor: pointer; display:none;">⏹ Stop</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sidebar -->
+      <div class="col-lg-5">
+        <div class="card shadow-sm border-0 p-4 h-100 rounded-4">
+          <h6 class="text-muted mb-1">Detected Gesture</h6>
+          <p id="detLabel" class="fs-4 text-primary fw-bold mb-0">—</p>
+          <p id="detStatus" class="fs-5 fw-bold text-secondary mt-2">Idle</p>
+          <p id="frameInfo" class="text-muted mb-1" style="display:none;">Frames Captured: 0</p>
+
+          <hr>
+          <h6 class="text-muted mb-2">Recent Predictions</h6>
+          <div id="history"
+               style="font-family:ui-monospace,Consolas,monospace;font-size:.95rem;
+                      max-height:140px;overflow:auto;border:1px dashed var(--neutral-300);
+                      border-radius:12px;padding:.5rem;">
+            <div class="text-muted">No predictions yet…</div>
+          </div>
+
+          <div class="d-flex justify-content-center mt-4">
+            <button id="clearBtn" class="btn btn-outline-secondary btn-lg shadow-sm">Clear History</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MediaPipe -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
+
+<script>
+(() => {
+  const videoEl=document.getElementById('cam');
+  const canvasEl=document.getElementById('overlay');
+  const ctx=canvasEl.getContext('2d');
+  const startBtn=document.getElementById('startBtn');
+  const stopBtn=document.getElementById('stopBtn');
+  const clearBtn=document.getElementById('clearBtn');
+  const detLabel=document.getElementById('detLabel');
+  const detStatus=document.getElementById('detStatus');
+  const recBadge=document.getElementById('recBadge');
+  const historyEl=document.getElementById('history');
+  const stateBadge=document.getElementById('stateBadge');
+  const frameInfo=document.getElementById('frameInfo');
+  const toggleVisuals=document.getElementById('toggleVisuals');
+  const toggleTimer=document.getElementById('toggleTimer');
+  const toggleResults=document.getElementById('toggleResults');
+  const toggleSpeed=document.getElementById('toggleSpeed');
+  const gestureOverlay=document.getElementById('gestureOverlay');
+  const timerOverlay=document.getElementById('timerOverlay');
+  const ghostBadge=document.getElementById('ghostBadge');
+
+  const PREDICT_URL=location.origin+'/predict_auto';
+  const SEQ_LEN=48;
+  let buf=[],running=false,handsPresent=false,frameCount=0,showVisuals=true,showTimer=true,showResults=true;
+  let predictInterval=null, tickInterval=null, countdown=5;
+
+  // ===== GHOST OVERLAY STATE =====
+  const HAND_CONN = [
+    [0,1],[1,2],[2,3],[3,4],
+    [0,5],[5,6],[6,7],[7,8],
+    [0,9],[9,10],[10,11],[11,12],
+    [0,13],[13,14],[14,15],[15,16],
+    [0,17],[17,18],[18,19],[19,20]
+  ];
+
+  let ghostEnabled = false;
+  let ghostFrames = null;
+  let ghostIdx = 0;
+  let ghostReady = false;
+  let loadingGhost = false;
+
+  let scaleMultiplier = 1.08;
+  let yOffset = -0.08;
+  let ghostPlaybackSpeed = 0.25;
+  let ghostTimer = null;
+  const GHOST_DURATION_MS = 12000;
+
+  // --- helpers ---
+  function flattenHand(lms){if(!lms)return new Float32Array(63);const a=[];for(let i=0;i<21;i++){const p=lms[i];a.push(p.x,p.y,p.z);}return new Float32Array(a);}
+  function lm(list,idx){if(!list||idx>=list.length)return{x:NaN,y:NaN,z:NaN};return list[idx];}
+  function dist2D(a,b){const dx=a.x-b.x,dy=a.y-b.y;return Math.hypot(dx,dy)||1e-6;}
+  function normalizeGlobal(hand63,a){
+    if(!hand63||hand63.length!==63||!a.L_SH||!a.R_SH)return new Float32Array(63);
+    const out=new Float32Array(63);
+    const Cx=(a.L_SH.x+a.R_SH.x)/2,Cy=(a.L_SH.y+a.R_SH.y)/2,Cz=(a.L_SH.z+a.R_SH.z)/2;
+    const scale=Math.max(1e-6,dist2D(a.L_SH,a.R_SH));
+    for(let i=0;i<63;i+=3){out[i]=(hand63[i]-Cx)/scale;out[i+1]=(hand63[i+1]-Cy)/scale;out[i+2]=(hand63[i+2]-Cz)/scale;}
+    return out;
+  }
+  function derivedAltitudeFeatures(L,R,a){
+    const out=[],SEL=[0,4,8,12,16,20],brow_y=0.5*(a.brow_r.y+a.brow_l.y);
+    for(const H of [L,R]){
+      for(const j of SEL){
+        const by=j*3+1,bz=j*3+2;
+        const py=H[by],pz=H[bz];
+        out.push(py-a.chin.y,py-a.lip_u.y,py-brow_y,py-a.forehead.y,pz-a.nose.z);
+      }
+    }
+    return new Float32Array(out);
+  }
+  function packFeature(res){
+    const p=res.poseLandmarks||[],f=res.faceLandmarks||[];
+    const a={L_SH:lm(p,11),R_SH:lm(p,12),nose:lm(f,1),forehead:lm(f,10),
+             lip_u:lm(f,13),brow_r:lm(f,65),brow_l:lm(f,295),chin:lm(f,152)};
+    const Lh=res.rightHandLandmarks?flattenHand(res.rightHandLandmarks):null;
+    const Rh=res.leftHandLandmarks?flattenHand(res.leftHandLandmarks):null;
+    if(!Lh&&!Rh)return null;
+    const L=normalizeGlobal(Lh,a),R=normalizeGlobal(Rh,a);
+    const alt=derivedAltitudeFeatures(L,R,a);
+    return new Float32Array([...L,...R,...alt,Lh?1:0,Rh?1:0]);
+  }
+  function temporalFix(frames,n){
+    if(frames.length<=n){
+      const pad=Array.from({length:n-frames.length},()=>frames[frames.length-1]);
+      return frames.concat(pad);
+    }
+    const step=frames.length/n;const out=[];
+    for(let i=0;i<n;i++){const idx=Math.min(Math.floor(i*step),frames.length-1);out.push(frames[idx]);}
+    return out;
+  }
+
+  // ===== ghost helpers =====
+  function anchorsValid(a){
+    return a && a.L_SH && a.R_SH &&
+           Number.isFinite(a.L_SH.x) && Number.isFinite(a.R_SH.x) &&
+           Number.isFinite(a.L_SH.y) && Number.isFinite(a.R_SH.y);
+  }
+
+  function drawGhostHand(norm63, anchors, ctx, color){
+    if (!norm63) return;
+    const baseScale = Math.max(1e-6, dist2D(anchors.L_SH, anchors.R_SH));
+    const scale = baseScale * scaleMultiplier;
+    const Cx = (anchors.L_SH.x + anchors.R_SH.x) / 2;
+    const Cy = (anchors.L_SH.y + anchors.R_SH.y) / 2 + yOffset;
+
+    const pts = [];
+    for (let i=0;i<63;i+=3){
+      pts.push({
+        x: norm63[i]   * scale + Cx,
+        y: norm63[i+1] * scale + Cy
+      });
+    }
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 4;
+
+    const W = canvasEl.width, H = canvasEl.height;
+    for (const [a,b] of HAND_CONN){
+      const p = pts[a], q = pts[b];
+      ctx.beginPath();
+      ctx.moveTo(p.x * W, p.y * H);
+      ctx.lineTo(q.x * W, q.y * H);
+      ctx.stroke();
+    }
+    for (const p of pts){
+      ctx.beginPath();
+      ctx.arc(p.x * W, p.y * H, 5, 0, 2*Math.PI);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // normalize label and infer category (numbers / colors / family)
+  function normLabel(s){
+    if(!s) return "";
+    let x = String(s).toLowerCase();
+
+    // strip category prefixes like "numbers_", "colors_", "family_"
+    x = x.replace(/^(numbers_|colors_|family_)/, "");
+
+    // keep only alphanumeric
+    x = x.replace(/[^a-z0-9]+/g,'');
+
+    const map = {
+      "1":"one","2":"two","3":"three","4":"four","5":"five","6":"six","7":"seven","8":"eight","9":"nine","10":"ten",
+      "grandmother":"grandmother","grandma":"grandmother","lola":"grandmother",
+      "grandfather":"grandfather","grandpa":"grandfather","lolo":"grandfather",
+      "mom":"mother","mother":"mother","nanay":"mother",
+      "dad":"father","father":"father","tatay":"father",
+      "aunt":"auntie","auntie":"auntie","tita":"auntie",
+      "uncle":"uncle","tito":"uncle",
+      "boy":"son","girl":"daughter",
+      "purple":"violet","violet":"violet","grey":"gray","gray":"gray",
+      "light":"light","dark":"dark",
+      "white":"white","black":"black","blue":"blue","brown":"brown","green":"green",
+      "orange":"orange","pink":"pink","red":"red","yellow":"yellow"
+    };
+    return map[x] || x;
+  }
+
+  function inferCategory(label){
+    const raw = String(label).toLowerCase();
+
+    // prefer explicit prefixes if present
+    if (raw.startsWith("numbers_")) return "numbers";
+    if (raw.startsWith("colors_"))  return "colors";
+    if (raw.startsWith("family_"))  return "family";
+
+    const l = normLabel(label);
+    const numbers = ["one","two","three","four","five","six","seven","eight","nine","ten"];
+    const family  = ["auntie","uncle","son","daughter","father","mother","grandmother","grandfather","cousin","parents"];
+
+    if (numbers.includes(l)) return "numbers";
+    if (family.includes(l))  return "family";
+    return "colors";
+  }
+
+  async function findDemoUrl(cat, key){
+    const STATIC_BASE = (window.location.origin + '/static/video').replace(/\/+$/, '');
+    const candidates = [];
+    for(let i=1;i<=10;i++){
+      candidates.push(`${key}_${String(i).padStart(2,'0')}.mp4`);
+    }
+    candidates.push(`${key}.mp4`);
+
+    for(const n of candidates){
+      const url = `${STATIC_BASE}/${cat}/${n}`;
+      try{
+        const r = await fetch(url,{method:'HEAD',cache:'no-store'});
+        if(r.ok) return url;
+      }catch(_){}
+    }
+    return null;
+  }
+
+  async function loadGhostFor(label){
+    const cat = inferCategory(label);
+    const key = normLabel(label);
+    const url = await findDemoUrl(cat, key);
+    if (!url) return false;
+
+    const v = document.createElement('video');
+    v.src = url;
+    v.muted = true;
+    v.playsInline = true;
+    v.crossOrigin = 'anonymous';
+
+    await new Promise((resolve, reject) => {
+      v.onloadedmetadata = resolve;
+      v.onerror = () => reject(new Error('Video error'));
+    });
+
+    ghostFrames = [];
+    const ghostHolistic = new Holistic({
+      locateFile: f => 'https://cdn.jsdelivr.net/npm/@mediapipe/holistic/' + f
+    });
+    ghostHolistic.setOptions({
+      selfieMode:false,
+      modelComplexity:1,
+      smoothLandmarks:true,
+      refineFaceLandmarks:false,
+      minDetectionConfidence:0.5,
+      minTrackingConfidence:0.5
+    });
+
+    ghostHolistic.onResults(res => {
+      const pose = res.poseLandmarks || [];
+      const face = res.faceLandmarks || [];
+      const anchors = {
+        L_SH: lm(pose,11),
+        R_SH: lm(pose,12),
+        nose: lm(face,1),
+        forehead: lm(face,10),
+        lip_u: lm(face,13),
+        brow_r: lm(face,65),
+        brow_l: lm(face,295),
+        chin: lm(face,152)
+      };
+      const Lh = res.rightHandLandmarks ? flattenHand(res.rightHandLandmarks) : null;
+      const Rh = res.leftHandLandmarks ? flattenHand(res.leftHandLandmarks) : null;
+      if (!Lh && !Rh) return;
+      const L = Lh ? normalizeGlobal(Lh,anchors) : null;
+      const R = Rh ? normalizeGlobal(Rh,anchors) : null;
+      ghostFrames.push({L,R});
+    });
+
+    const total = 24;
+    for(let i=0;i<total;i++){
+      v.currentTime = (v.duration * i)/total;
+      await new Promise(r => v.onseeked = r);
+      await ghostHolistic.send({image:v});
+    }
+
+    ghostReady = ghostFrames && ghostFrames.length>0;
+    return ghostReady;
+  }
+
+  // --- mediapipe setup ---
+  const holistic=new Holistic({locateFile:f=>'https://cdn.jsdelivr.net/npm/@mediapipe/holistic/'+f});
+  holistic.setOptions({selfieMode:false,modelComplexity:2,smoothLandmarks:true,
+                       refineFaceLandmarks:false,minDetectionConfidence:0.55,minTrackingConfidence:0.55});
+
+  holistic.onResults(res=>{
+    ctx.clearRect(0,0,canvasEl.width,canvasEl.height);
+    ctx.drawImage(res.image,0,0,canvasEl.width,canvasEl.height);
+    const RH=res.rightHandLandmarks, LH=res.leftHandLandmarks;
+    handsPresent=!!(RH||LH);
+    if(showVisuals && handsPresent){
+      const drawBox=(h,color)=>{
+        let minX=1,minY=1,maxX=0,maxY=0;
+        h.forEach(p=>{minX=Math.min(minX,p.x);maxX=Math.max(maxX,p.x);minY=Math.min(minY,p.y);maxY=Math.max(maxY,p.y);});
+        ctx.strokeStyle=color;ctx.lineWidth=3;
+        ctx.strokeRect(minX*canvasEl.width,minY*canvasEl.height,(maxX-minX)*canvasEl.width,(maxY-minY)*canvasEl.height);
+        h.forEach(p=>{ctx.beginPath();ctx.arc(p.x*canvasEl.width,p.y*canvasEl.height,4,0,2*Math.PI);ctx.fillStyle=color;ctx.fill();});
+      };
+      if(RH)drawBox(RH,'rgba(0,255,0,0.8)');
+      if(LH)drawBox(LH,'rgba(255,0,0,0.8)');
+    }
+
+    const pose = res.poseLandmarks || [];
+    const anchors = {
+      L_SH: lm(pose,11),
+      R_SH: lm(pose,12)
+    };
+
+    // draw ghost overlay if active
+    if (ghostEnabled && ghostReady && anchorsValid(anchors) && ghostFrames && ghostFrames.length){
+      ghostIdx += ghostPlaybackSpeed;
+      if (ghostIdx >= ghostFrames.length) ghostIdx = 0;
+
+      const frameA = ghostFrames[Math.floor(ghostIdx) % ghostFrames.length];
+      const frameB = ghostFrames[Math.floor(ghostIdx + 1) % ghostFrames.length];
+      const t = ghostIdx % 1;
+
+      const L = frameA.L && frameB.L ? new Float32Array(63) : null;
+      const R = frameA.R && frameB.R ? new Float32Array(63) : null;
+
+      if (L){
+        for(let i=0;i<63;i++) L[i] = (1-t)*frameA.L[i] + t*frameB.L[i];
+      }
+      if (R){
+        for(let i=0;i<63;i++) R[i] = (1-t)*frameA.R[i] + t*frameB.R[i];
+      }
+
+      if (L) drawGhostHand(L, anchors, ctx, 'rgba(59,130,246,0.85)');
+      if (R) drawGhostHand(R, anchors, ctx, 'rgba(34,197,94,0.85)');
+      ghostBadge.style.display = 'inline-block';
+    } else {
+      ghostBadge.style.display = 'none';
+    }
+
+    const feat=packFeature(res);
+    if (running && feat) {
+      buf.push(feat);
+      if (buf.length > SEQ_LEN) buf.shift();
+      frameCount = buf.length;
+      frameInfo.textContent = 'Frames Captured: ' + frameCount;
+    }
+  });
+
+  const camera=new Camera(videoEl,{onFrame:async()=>{await holistic.send({image:videoEl});},width:640,height:480});
+
+  // --- prediction ---
+  async function predict(){
+    if(buf.length<5) return;
+    const fixed=temporalFix(buf,SEQ_LEN);
+    const seq=fixed.flatMap(f=>Array.from(f));
+    try{
+      const res=await fetch(PREDICT_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sequence:seq})});
+      const j=await res.json();
+      if(!showResults)return;
+
+      if(j.prediction==='Incorrect'){
+        gestureOverlay.textContent=`❌ Incorrect — Closest: ${j.closest_sign||'—'}`;
+        gestureOverlay.style.display='block';
+        gestureOverlay.style.background='rgba(200,0,0,0.8)';
+
+        // 🔥 AUTO-GHOST when incorrect and closest_sign exists
+        if (j.closest_sign && !loadingGhost){
+          loadingGhost = true;
+          ghostEnabled = false;
+          ghostReady = false;
+          ghostFrames = null;
+          ghostIdx = 0;
+          if (ghostTimer) clearTimeout(ghostTimer);
+
+          try{
+            const ok = await loadGhostFor(j.closest_sign);
+            if (ok){
+              ghostEnabled = true;
+              ghostTimer = setTimeout(() => {
+                ghostEnabled = false;
+                ghostReady = false;
+                ghostFrames = null;
+                ghostBadge.style.display = 'none';
+              }, GHOST_DURATION_MS);
+            }
+          }catch(e){
+            console.error('Ghost load error', e);
+          }finally{
+            loadingGhost = false;
+          }
+        }
+      } else {
+        gestureOverlay.textContent=`✅ Correct — ${j.prediction||'—'}`;
+        gestureOverlay.style.display='block';
+        gestureOverlay.style.background='rgba(0,140,60,0.8)';
+        // turn off ghost on correct
+        ghostEnabled = false;
+        ghostReady = false;
+        ghostFrames = null;
+        if (ghostTimer) clearTimeout(ghostTimer);
+        ghostBadge.style.display = 'none';
+      }
+    }catch(e){
+      console.error(e);
+      gestureOverlay.textContent='⚠ Prediction error';
+      gestureOverlay.style.display='block';
+      gestureOverlay.style.background='rgba(255,140,0,0.8)';
+    }
+  }
+
+  // --- toggles ---
+  toggleVisuals.onchange=()=>{showVisuals=toggleVisuals.checked;};
+  toggleTimer.onchange=()=>{showTimer=toggleTimer.checked; timerOverlay.style.display=showTimer?'block':'none';};
+  toggleResults.onchange=()=>{showResults=toggleResults.checked; gestureOverlay.style.display=showResults?'block':'none';};
+
+  // --- controls ---
+  startBtn.onclick = async () => {
+    if (running) return;
+    running = true;
+    buf = [];
+    frameCount = 0;
+    recBadge.style.display = 'inline-block';
+    stateBadge.textContent = 'State: LIVE';
+    await camera.start();
+    startBtn.style.display = 'none';
+    stopBtn.style.display = 'inline-block';
+
+    // ⏱ check if fast signer mode is on
+    const fastMode = toggleSpeed.checked;
+    const intervalMs = fastMode ? 3000 : 5000;
+    countdown = fastMode ? 3 : 5;
+
+    timerOverlay.textContent = countdown;
+    timerOverlay.style.display = showTimer ? 'block' : 'none';
+
+    // countdown colors
+    tickInterval = setInterval(() => {
+      countdown--;
+      if (countdown <= 0) countdown = fastMode ? 3 : 5;
+      timerOverlay.textContent = countdown;
+      if (countdown <= 1) timerOverlay.style.background = '#dc3545'; // red
+      else if (countdown <= 2) timerOverlay.style.background = '#fd7e14'; // orange
+      else timerOverlay.style.background = '#0d6efd'; // blue
+    }, 1000);
+
+    // 🔥 run first prediction quickly, then repeat
+    setTimeout(() => { predict(); }, 1000);
+    predictInterval = setInterval(predict, intervalMs);
+  };
+
+  stopBtn.onclick=async()=>{
+    running=false;
+    recBadge.style.display='none';
+    stateBadge.textContent='State: STOPPED';
+    clearInterval(predictInterval);clearInterval(tickInterval);
+    timerOverlay.style.display='none';
+    gestureOverlay.style.display='none';
+    ghostEnabled = false;
+    ghostReady = false;
+    ghostFrames = null;
+    ghostBadge.style.display = 'none';
+    if (ghostTimer) clearTimeout(ghostTimer);
+    try{await camera.stop();}catch(_){}
+    stopBtn.style.display='none';startBtn.style.display='inline-block';
+  };
+
+  clearBtn.onclick=()=>{historyEl.innerHTML='<div class="text-muted">No predictions yet…</div>';};
+
+  function resize(){canvasEl.width=videoEl.clientWidth;canvasEl.height=videoEl.clientHeight;}
+  new ResizeObserver(resize).observe(videoEl); resize();
+})();
+</script>
+
+{% endblock %}
